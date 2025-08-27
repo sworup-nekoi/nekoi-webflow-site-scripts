@@ -8,4 +8,4 @@
 4. Go to wenflow and paste the jsdeliver link for head CSS as: <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/sworup-nekoi/nekoi-webflow-site-scripts@v1.0/folder-name/file-name.css" />
 5. Go to wenflow and paste the jsdeliver link for footer JS as: <script src="https://cdn.jsdelivr.net/gh/sworup-nekoi/nekoi-webflow-site-scripts@v1.0/folder-name/file-name.js"></script>
 
-### You can choose to upload each individual blocks or the entire code. 
+### You can choose to upload each individual blocks or the entire code.
