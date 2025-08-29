@@ -39,7 +39,7 @@ html, body {
   /* Cap spacing & size (fluid) */
   --viz-cap-gap:  clamp(0.5px, 0.4vmin, 3px);
   --viz-cap-h:    clamp(0.5px, 0.2vmin, 2px);
-  --viz-cap-drop: 0.25;                         /* lower is floatier */
+  --viz-cap-drop: 0.50;                         /* lower is floatier */
 
   /* Behaviour */
   --viz-band-curve: 1.6;                        /* >1 = more low-end; 1 = linear */
