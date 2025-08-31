@@ -421,84 +421,101 @@
       const preloaderVisible = !!(preloader && getComputedStyle(preloader).display !== "none");
 
       if (preloaderVisible) {
-        const targets = [];
-        if (preloader) targets.push(preloader);
-        if (overlayHot && overlayHot !== preloader) targets.push(overlayHot);
-
-        let armed = false;
-        const onEnter = (e) => {
-          if (armed) return;
-          armed = true;
-
-          // Ensure the audio graph is muted immediately, then start playback
-          // *inside* this user gesture so the browser allows it.
-          const now = ac.currentTime;
-          try {
-            gain.gain.cancelScheduledValues(now);
-            gain.gain.setValueAtTime(0, now);
-          } catch {}
-          ac.resume().catch(()=>{});
-          audioEl.play().then(()=> {
-            sessionStorage.setItem(PLAY_KEY, "1");
-          }).catch(()=>{});
-
-          const FADE_MS = 800;
-          const NORMAL_HIDE_MS = 1150; // ≈ 600ms expand + 500ms fade from your preloader
-          const MAX_WAIT_MS = 4000;
-
-          let mo, pollId;
-          const cleanup = () => {
-            targets.forEach(t => t.removeEventListener("click", onEnter, captureOpts));
-            if (mo) mo.disconnect();
-            if (pollId) clearInterval(pollId);
-          };
-
-          const isHidden = () => {
-            if (!preloader) return true;
-            if (!preloader.parentNode) return true;
-            const cs = getComputedStyle(preloader);
-            return cs.display === "none";
-          };
-
-          const tryFade = () => {
-            if (onEnter._didFade) return;
-            onEnter._didFade = true;
-            fadeTo(1, FADE_MS);
-            cleanup();
-          };
-
-          // Observe style/class changes to detect display:none. Also poll lightly.
-          if (preloader) {
-            mo = new MutationObserver(() => { if (isHidden()) tryFade(); });
-            mo.observe(preloader, { attributes: true, attributeFilter: ["style", "class"] });
-          }
-          pollId = setInterval(() => { if (isHidden()) tryFade(); }, 120);
-          // Timed checks (fade ONLY if hidden)
-          const maybeFadeIfHidden = () => { if (isHidden()) tryFade(); };
-          setTimeout(maybeFadeIfHidden, NORMAL_HIDE_MS);
-          setTimeout(maybeFadeIfHidden, MAX_WAIT_MS);
+        // Helpers
+        const isHidden = () => {
+          if (!preloader) return true;
+          if (!preloader.parentNode) return true;
+          const cs = getComputedStyle(preloader);
+          return cs.display === "none";
         };
+        const isHot = () => !!(overlayHot && getComputedStyle(overlayHot).pointerEvents !== "none");
 
-        // Use capture so we receive the click even if inner elements stopPropagation.
-        const captureOpts = { once: true, capture: true };
-        targets.forEach(t => t.addEventListener("click", onEnter, captureOpts));
+        // Arm the click only when the expander is interactive (pointer-events:auto)
+        function armEnterClick() {
+          const targets = [];
+          if (preloader) targets.push(preloader);
+          if (overlayHot && overlayHot !== preloader) targets.push(overlayHot);
 
-        // IMPORTANT: Do NOT add any global gesture fallbacks on pages with the preloader;
-        // we only want audio after the official "enter" click.
+          let armed = false;
+          const captureOpts = { once: true, capture: true };
+
+          const onEnter = (e) => {
+            if (armed) return;
+            armed = true;
+            // Mute immediately; start playback inside this user gesture
+            const now = ac.currentTime;
+            try {
+              gain.gain.cancelScheduledValues(now);
+              gain.gain.setValueAtTime(0, now);
+            } catch {}
+            ac.resume().catch(()=>{});
+            audioEl.play().then(() => {
+              sessionStorage.setItem(PLAY_KEY, "1");
+            }).catch(()=>{});
+
+            // Fade up ONLY once preloader is actually hidden
+            const FADE_MS = 800;
+            let mo2, poll2;
+            const cleanup = () => {
+              targets.forEach(t => t.removeEventListener("click", onEnter, captureOpts));
+              if (mo2) mo2.disconnect();
+              if (poll2) clearInterval(poll2);
+            };
+            const tryFade = () => {
+              if (onEnter._didFade) return;
+              if (isHidden()) {
+                onEnter._didFade = true;
+                fadeTo(1, FADE_MS);
+                cleanup();
+              }
+            };
+            if (preloader) {
+              mo2 = new MutationObserver(tryFade);
+              mo2.observe(preloader, { attributes: true, attributeFilter: ["style", "class"] });
+            }
+            poll2 = setInterval(tryFade, 120);
+
+            // Allow the click to continue to the preloader so it can do its own hide logic.
+            // (No stopPropagation here on purpose.)
+          };
+
+          targets.forEach(t => t.addEventListener("click", onEnter, captureOpts));
+        }
+
+        if (isHot()) {
+          armEnterClick();
+        } else {
+          // Wait for overlay to become interactive
+          let mo, poll, safetyTO;
+          const check = () => {
+            if (isHot()) {
+              cleanup();
+              armEnterClick();
+            }
+          };
+          const cleanup = () => {
+            if (mo) mo.disconnect();
+            if (poll) clearInterval(poll);
+            if (safetyTO) clearTimeout(safetyTO);
+          };
+          if (overlayHot) {
+            mo = new MutationObserver(check);
+            mo.observe(overlayHot, { attributes: true, attributeFilter: ["style", "class"] });
+          }
+          poll = setInterval(check, 120);
+          safetyTO = setTimeout(check, 15000); // keep waiting; no fallback unlock
+        }
       } else {
-        // No preloader on this page.
-        // If the user had music playing on a previous page, try to resume automatically.
+        // No preloader on this page: resume only if user had music playing.
         if (sessionStorage.getItem(PLAY_KEY) === "1") {
           audioEl.play().then(() => {
             ac.resume().catch(()=>{});
             fadeTo(1, 800);
           }).catch(() => {
-            // Autoplay blocked by the browser. We intentionally DO NOT attach any
-            // global "first click anywhere" handlers. The user must use the explicit
-            // visualizer toggle control to start playback.
+            // Autoplay blocked; user must use explicit [data-viz-toggle]
           });
         }
-        // Otherwise do nothing here: playback can be started via [data-viz-toggle] only.
+        // Otherwise do nothing: start via [data-viz-toggle] only.
       }
 
       // Auto-bind any [data-viz-toggle] controls on the page
