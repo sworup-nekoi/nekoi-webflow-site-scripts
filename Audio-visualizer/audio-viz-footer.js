@@ -412,24 +412,36 @@
         } catch {}
       }, { once:true });
 
-      // homepage: preloader click
+      // Gate audio start behind preloader if present/visible.
+      // We prefer binding to `.overlay-expander` because your preloader only enables
+      // pointer events on it once the intro text finishes; this prevents early starts.
       const preloader = document.querySelector(".preloader");
-      if (preloader) preloader.addEventListener("click", startAudioOnce, { once: true });
+      const overlayHot = document.querySelector(".overlay-expander");
+      const preloaderVisible = preloader && getComputedStyle(preloader).display !== "none";
+      const hasToggle = !!document.querySelector("[data-viz-toggle]");
 
-      // other pages: auto-resume if previous page was playing
-      if (sessionStorage.getItem(PLAY_KEY) === "1") {
-        audioEl.play().then(() => {
-          ac.resume().catch(()=>{});
-          fadeIn();
-        }).catch(() => {
-          ["pointerdown","click","keydown","touchstart"].forEach(t =>
-            window.addEventListener(t, startAudioOnce, { once:true, passive:true })
-          );
-        });
+      if (preloaderVisible) {
+        // Bind to the gated layer if available; else fall back to the preloader.
+        (overlayHot || preloader).addEventListener("click", startAudioOnce, { once: true });
+
+        // IMPORTANT: Do NOT add any global gesture fallbacks on pages with the preloader;
+        // we only want audio after the official "enter" click.
       } else {
-        ["pointerdown","click","keydown","touchstart"].forEach(t =>
-          window.addEventListener(t, startAudioOnce, { once:true, passive:true })
-        );
+        // No preloader on this page.
+        // If the user had music playing on a previous page, try to resume automatically.
+        if (sessionStorage.getItem(PLAY_KEY) === "1") {
+          audioEl.play().then(() => {
+            ac.resume().catch(()=>{});
+            fadeIn();
+          }).catch(() => {
+            // Autoplay blocked by the browser. We intentionally DO NOT attach any
+            // global "first click anywhere" handlers. The user must use the explicit
+            // visualizer toggle control to start playback.
+          });
+        }
+        // If there is no previous play state (or autoplay was blocked),
+        // do nothing here. Playback can be started via [data-viz-toggle] only.
+        // (No global first-gesture listeners.)
       }
 
       // Auto-bind any [data-viz-toggle] controls on the page
