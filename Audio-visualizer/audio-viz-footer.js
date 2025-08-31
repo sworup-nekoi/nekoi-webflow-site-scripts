@@ -28,6 +28,12 @@
       try { audioEl.crossOrigin = audioEl.crossOrigin || "anonymous"; } catch {}
       audioEl.preload = audioEl.preload || "auto";
 
+      // iOS inline playback hint
+      try {
+        audioEl.setAttribute("playsinline", "");
+        audioEl.setAttribute("webkit-playsinline", "");
+      } catch {}
+
       // --- Persistence keys -------------------------------------------------
       const PLAY_KEY = "viz:was-playing";
       const TIME_KEY = "viz:last-time";      // optional: restore position
@@ -122,6 +128,106 @@
       source.connect(analyser);
       analyser.connect(gain);
       gain.connect(ac.destination);
+
+      // === Exposed playback API (fade via GainNode; iOS-friendly) ==========
+      function fadeTo(target, ms = 300) {
+        const now = ac.currentTime;
+        const sec = Math.max(0.001, (ms|0) / 1000);
+        const g = gain.gain;
+        try {
+          g.cancelScheduledValues(now);
+          g.setValueAtTime(g.value, now);
+          g.linearRampToValueAtTime(Math.max(0, Math.min(1, target)), now + sec);
+        } catch {}
+        return new Promise(res => setTimeout(res, Math.max(0, ms|0)));
+      }
+
+      async function playWithFade(ms = 800) {
+        try { await ac.resume(); } catch {}
+        try { await audioEl.play(); } catch {}
+        sessionStorage.setItem(PLAY_KEY, "1");
+        await fadeTo(1, ms);
+      }
+
+      async function pauseWithFade(ms = 400) {
+        await fadeTo(0, ms);
+        audioEl.pause();
+        sessionStorage.setItem(PLAY_KEY, "0");
+        try { sessionStorage.setItem(TIME_KEY, String(audioEl.currentTime || 0)); } catch {}
+      }
+
+      // Persist currentTime periodically
+      (function bindPersistence() {
+        if (audioEl.__vizPersistBound) return;
+        audioEl.__vizPersistBound = true;
+        const saveTime = () => {
+          try { sessionStorage.setItem(TIME_KEY, String(audioEl.currentTime || 0)); } catch {}
+        };
+        audioEl.addEventListener("pause", saveTime);
+        document.addEventListener("visibilitychange", () => {
+          if (document.visibilityState === "hidden") saveTime();
+        });
+        window.addEventListener("pagehide", saveTime);
+        setInterval(() => { if (!audioEl.paused) saveTime(); }, 2000);
+      })();
+
+      // Click/tap toggle binding
+      function initToggle(opts = {}) {
+        const sel = opts.selector || "[data-viz-toggle]";
+        document.querySelectorAll(sel).forEach((el) => bindToggle(el, opts));
+      }
+
+      function bindToggle(el, opts = {}) {
+        const fadeInMs  = +el.dataset.fadeIn  || opts.fadeInMs  || 800;
+        const fadeOutMs = +el.dataset.fadeOut || opts.fadeOutMs || 400;
+        el.setAttribute("role", "button");
+        if (!el.hasAttribute("tabindex")) el.tabIndex = 0;
+
+        let lastTouchTime = 0;
+        const stopAll = (e) => {
+          if (!e) return;
+          e.preventDefault();
+          e.stopPropagation();
+          if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+        };
+
+        const setUI = (on) => {
+          el.classList.toggle("is-playing", !!on);
+          el.setAttribute("aria-pressed", on ? "true" : "false");
+        };
+
+        const onToggle = (e) => {
+          if (e && e.type === "click" && Date.now() - lastTouchTime < 350) return; // iOS double-fire guard
+          stopAll(e);
+          if (audioEl.paused || audioEl.ended) {
+            playWithFade(fadeInMs).then(() => setUI(true));
+          } else {
+            pauseWithFade(fadeOutMs).then(() => setUI(false));
+          }
+        };
+
+        el.addEventListener("touchend", (e) => { lastTouchTime = Date.now(); onToggle(e); }, { passive: false });
+        el.addEventListener("click", onToggle, { passive: false });
+        el.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") onToggle(e);
+        });
+
+        // reflect initial state
+        const playing = sessionStorage.getItem(PLAY_KEY) === "1" && !audioEl.paused;
+        setUI(playing);
+      }
+
+      // Expose API on window for external control
+      window.__audioViz = {
+        audio: audioEl,
+        context: ac,
+        analyser,
+        gain,
+        fadeTo,
+        playWithFade,
+        pauseWithFade,
+        initToggle,
+      };
 
       // --- Sizing / DPR -----------------------------------------------------
       let dpr = Math.max(1, window.devicePixelRatio || 1);
@@ -310,6 +416,11 @@
         ["pointerdown","click","keydown","touchstart"].forEach(t =>
           window.addEventListener(t, startAudioOnce, { once:true, passive:true })
         );
+      }
+
+      // Auto-bind any [data-viz-toggle] controls on the page
+      if (window.__audioViz && typeof window.__audioViz.initToggle === "function") {
+        window.__audioViz.initToggle();
       }
 
       draw();
