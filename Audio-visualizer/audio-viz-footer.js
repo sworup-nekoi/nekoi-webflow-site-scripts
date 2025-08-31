@@ -23,6 +23,7 @@
         document.querySelector("audio#site-audio") ||
         document.querySelector("audio[src]");
       if (!audioEl) return;
+      try { audioEl.setAttribute("playsinline", ""); } catch {}
 
       // allow AnalyserNode on remote audio + ensure it buffers
       try { audioEl.crossOrigin = audioEl.crossOrigin || "anonymous"; } catch {}
@@ -63,7 +64,7 @@
       let BAR_A, BAR_B, CAP, CAP_GAP_PX, CAP_H_PX, CAP_DROP,
           PAD_X, GAP_X, MAX_BARS, MIN_BAR, BAND_CURVE, ALT_EVERY,
           AGC_ON, AGC_SMOOTH, AGC_MAX, SENSITIVITY, SMOOTHING,
-          QUIET_BOOST, MIN_ACTIVE_FRAC, MIN_ACTIVE_PX, IDLE_PX, SILENCE_THRESH;
+          QUIET_BOOST, MIN_ACTIVE_FRAC, MIN_ACTIVE_PX, IDLE_PX, SILENCE_THRESH, FADE_IN_S, FADE_OUT_S;
 
       function readTheme() {
         BAR_A       = cssVar("--viz-bar",       "#fff");
@@ -95,6 +96,8 @@
 
         IDLE_PX        = lenVarPx("--viz-idle-px", 2);
         SILENCE_THRESH = Math.max(0, Math.min(0.2, parseFloat(cssVar("--viz-silence-thresh","0.02")) || 0.02));
+        FADE_IN_S   = Math.max(0.01, parseFloat(cssVar("--viz-fade-in-s","1.2")) || 1.2);
+        FADE_OUT_S  = Math.max(0.01, parseFloat(cssVar("--viz-fade-out-s","0.5")) || 0.5);
       }
       readTheme();
 
@@ -256,17 +259,19 @@
       }
 
       // --- Start audio + persistence ---------------------------------------
-      function fadeIn() {
+      function fadeTo(target, seconds, after) {
         const now = ac.currentTime;
         gain.gain.cancelScheduledValues(now);
-        gain.gain.setValueAtTime(gain.gain.value, now);
-        gain.gain.linearRampToValueAtTime(1, now + 1.2);
+        const cur = Math.max(0, Math.min(1, gain.gain.value));
+        gain.gain.setValueAtTime(cur, now);
+        gain.gain.linearRampToValueAtTime(target, now + Math.max(0.01, seconds));
+        if (after) setTimeout(after, Math.max(10, seconds * 1000));
       }
 
       function startAudio() {
         ac.resume().catch(()=>{});
         audioEl.play().catch(()=>{});
-        fadeIn();
+        fadeTo(1, FADE_IN_S);
       }
 
       function startAudioOnce() {
@@ -274,6 +279,32 @@
           sessionStorage.setItem(PLAY_KEY, "1");
         }
         startAudio();
+      }
+
+      function togglePlay(e) {
+        if (e) { e.preventDefault(); e.stopPropagation(); }
+        if (audioEl.paused) {
+          sessionStorage.setItem(PLAY_KEY, "1");
+          ac.resume().catch(()=>{});
+          audioEl.play().then(() => fadeTo(1, FADE_IN_S)).catch(()=>{});
+        } else {
+          sessionStorage.setItem(PLAY_KEY, "0");
+          fadeTo(0, FADE_OUT_S, () => audioEl.pause());
+        }
+      }
+
+      function bindToggleTargets() {
+        const targets = [];
+        const linkWrap = document.querySelector(".visualizer-wrapper");
+        if (linkWrap) targets.push(linkWrap);
+        if (wrap) targets.push(wrap); // fallback
+        // de-dupe just in case
+        const uniq = Array.from(new Set(targets.filter(Boolean)));
+        uniq.forEach((el) => {
+          el.style.cursor = el.style.cursor || "pointer";
+          el.addEventListener("click", togglePlay, false);           // must NOT be passive
+          el.addEventListener("touchend", togglePlay, { passive:false }); // iOS tap
+        });
       }
 
       // remember play/pause + position
@@ -300,7 +331,7 @@
       if (sessionStorage.getItem(PLAY_KEY) === "1") {
         audioEl.play().then(() => {
           ac.resume().catch(()=>{});
-          fadeIn();
+          fadeTo(1, FADE_IN_S);
         }).catch(() => {
           ["pointerdown","click","keydown","touchstart"].forEach(t =>
             window.addEventListener(t, startAudioOnce, { once:true, passive:true })
@@ -311,6 +342,8 @@
           window.addEventListener(t, startAudioOnce, { once:true, passive:true })
         );
       }
+
+      bindToggleTargets();
 
       draw();
     } catch (e) {
