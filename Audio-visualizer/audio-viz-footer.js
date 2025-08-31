@@ -413,50 +413,44 @@
       }, { once:true });
 
       // Gate audio start behind preloader if present/visible.
+      // We always start playback MUTED inside the actual click gesture,
+      // then fade up once the preloader is truly hidden. This satisfies
+      // autoplay policies on all platforms (including iOS).
       const preloader = document.querySelector(".preloader");
       const overlayHot = document.querySelector(".overlay-expander");
-      const preloaderVisible = preloader && getComputedStyle(preloader).display !== "none";
-      const hasToggle = !!document.querySelector("[data-viz-toggle]");
+      const preloaderVisible = !!(preloader && getComputedStyle(preloader).display !== "none");
 
       if (preloaderVisible) {
-        // Bind to BOTH the preloader wrapper and the gated inner layer (if present).
-        // After the user clicks, we start playback immediately but MUTED,
-        // then fade in once the preloader is actually hidden (or after a timeout).
         const targets = [];
         if (preloader) targets.push(preloader);
         if (overlayHot && overlayHot !== preloader) targets.push(overlayHot);
-        const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.userAgent.includes("Mac") && "ontouchend" in document);
 
         let armed = false;
         const onEnter = (e) => {
-          // Arm only once
           if (armed) return;
           armed = true;
 
+          // Ensure the audio graph is muted immediately, then start playback
+          // *inside* this user gesture so the browser allows it.
+          const now = ac.currentTime;
+          try {
+            gain.gain.cancelScheduledValues(now);
+            gain.gain.setValueAtTime(0, now);
+          } catch {}
+          ac.resume().catch(()=>{});
+          audioEl.play().then(()=> {
+            sessionStorage.setItem(PLAY_KEY, "1");
+          }).catch(()=>{});
+
           const FADE_MS = 800;
-          const NORMAL_HIDE_MS = 1150; // ≈ 600ms expand + 500ms fade
+          const NORMAL_HIDE_MS = 1150; // ≈ 600ms expand + 500ms fade from your preloader
           const MAX_WAIT_MS = 4000;
 
           let mo, pollId;
-
           const cleanup = () => {
             targets.forEach(t => t.removeEventListener("click", onEnter, captureOpts));
             if (mo) mo.disconnect();
             if (pollId) clearInterval(pollId);
-          };
-
-          const tryFade = () => {
-            if (onEnter._didFade) return;
-            onEnter._didFade = true;
-
-            if (IS_IOS) {
-              // We already started muted; just fade up.
-              fadeTo(1, FADE_MS);
-            } else {
-              // Start playback now (after hide) with a fade; may be blocked on iOS, but that's OK here.
-              playWithFade(FADE_MS);
-            }
-            cleanup();
           };
 
           const isHidden = () => {
@@ -466,32 +460,22 @@
             return cs.display === "none";
           };
 
-          const check = () => { if (isHidden()) tryFade(); };
+          const tryFade = () => {
+            if (onEnter._didFade) return;
+            onEnter._didFade = true;
+            fadeTo(1, FADE_MS);
+            cleanup();
+          };
 
-          // iOS: start playback immediately but muted (so the later fade is guaranteed)
-          if (IS_IOS) {
-            const now = ac.currentTime;
-            try {
-              gain.gain.cancelScheduledValues(now);
-              gain.gain.setValueAtTime(0, now); // hard mute
-            } catch {}
-            ac.resume().catch(()=>{});
-            audioEl.play().catch(()=>{});
-            sessionStorage.setItem(PLAY_KEY, "1");
-          }
-          // Non‑iOS: do not start yet. We'll start when the preloader is actually hidden.
-
-          // Observe style/class changes to detect display:none, plus a light poll.
+          // Observe style/class changes to detect display:none. Also poll lightly.
           if (preloader) {
-            mo = new MutationObserver(check);
+            mo = new MutationObserver(() => { if (isHidden()) tryFade(); });
             mo.observe(preloader, { attributes: true, attributeFilter: ["style", "class"] });
           }
-          pollId = setInterval(check, 120);
-          check(); // in case it's already hidden
-
+          pollId = setInterval(() => { if (isHidden()) tryFade(); }, 120);
           // Timed fallbacks
-          setTimeout(tryFade, NORMAL_HIDE_MS); // normal path
-          setTimeout(tryFade, MAX_WAIT_MS);    // absolute cap
+          setTimeout(tryFade, NORMAL_HIDE_MS);
+          setTimeout(tryFade, MAX_WAIT_MS);
         };
 
         // Use capture so we receive the click even if inner elements stopPropagation.
@@ -499,7 +483,7 @@
         targets.forEach(t => t.addEventListener("click", onEnter, captureOpts));
 
         // IMPORTANT: Do NOT add any global gesture fallbacks on pages with the preloader;
-        // we only want audio after the official "enter" click finishes the hide.
+        // we only want audio after the official "enter" click.
       } else {
         // No preloader on this page.
         // If the user had music playing on a previous page, try to resume automatically.
