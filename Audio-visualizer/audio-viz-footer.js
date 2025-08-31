@@ -422,10 +422,60 @@
 
       if (preloaderVisible) {
         // Bind to the gated layer if available; else fall back to the preloader.
-        (overlayHot || preloader).addEventListener("click", startAudioOnce, { once: true });
+        const clickTarget = overlayHot || preloader;
+        clickTarget.addEventListener("click", () => {
+          // Wait until the preloader is actually hidden before starting audio.
+          // This matches your expand (≈600ms) + fade (≈500ms) sequence.
+          const HARD_FALLBACK_MS = 1300; // 0.6s + 0.5s + buffer
+          const MAX_WAIT_MS = 4000;
+
+          let done = false;
+          let mo;
+          let pollId;
+
+          const cleanup = () => {
+            if (mo) mo.disconnect();
+            if (pollId) clearInterval(pollId);
+          };
+
+          const start = () => {
+            if (done) return;
+            done = true;
+            cleanup();
+            startAudioOnce();
+          };
+
+          const isHidden = () => {
+            if (!preloader) return true;
+            // Hidden if removed or display:none
+            if (!preloader.parentNode) return true;
+            const cs = getComputedStyle(preloader);
+            return cs.display === "none";
+          };
+
+          const check = () => {
+            if (isHidden()) start();
+          };
+
+          // Observe style/class changes to detect when display becomes none
+          if (preloader) {
+            mo = new MutationObserver(check);
+            mo.observe(preloader, { attributes: true, attributeFilter: ["style", "class"] });
+          }
+
+          // Light polling as a safety net
+          pollId = setInterval(check, 120);
+
+          // Immediate check (in case it's already hidden)
+          check();
+
+          // Timed fallbacks
+          setTimeout(start, HARD_FALLBACK_MS);      // normal path
+          setTimeout(start, MAX_WAIT_MS);          // absolute cap
+        }, { once: true });
 
         // IMPORTANT: Do NOT add any global gesture fallbacks on pages with the preloader;
-        // we only want audio after the official "enter" click.
+        // we only want audio after the official "enter" click finishes the hide.
       } else {
         // No preloader on this page.
         // If the user had music playing on a previous page, try to resume automatically.
@@ -441,7 +491,7 @@
         }
         // If there is no previous play state (or autoplay was blocked),
         // do nothing here. Playback can be started via [data-viz-toggle] only.
-        // (No global first-gesture listeners.)
+        // (No global first‑gesture listeners.)
       }
 
       // Auto-bind any [data-viz-toggle] controls on the page
