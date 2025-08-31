@@ -413,66 +413,90 @@
       }, { once:true });
 
       // Gate audio start behind preloader if present/visible.
-      // We prefer binding to `.overlay-expander` because your preloader only enables
-      // pointer events on it once the intro text finishes; this prevents early starts.
       const preloader = document.querySelector(".preloader");
       const overlayHot = document.querySelector(".overlay-expander");
       const preloaderVisible = preloader && getComputedStyle(preloader).display !== "none";
       const hasToggle = !!document.querySelector("[data-viz-toggle]");
 
       if (preloaderVisible) {
-        // Bind to the gated layer if available; else fall back to the preloader.
-        const clickTarget = overlayHot || preloader;
-        clickTarget.addEventListener("click", () => {
-          // Wait until the preloader is actually hidden before starting audio.
-          // This matches your expand (≈600ms) + fade (≈500ms) sequence.
-          const HARD_FALLBACK_MS = 1300; // 0.6s + 0.5s + buffer
+        // Bind to BOTH the preloader wrapper and the gated inner layer (if present).
+        // After the user clicks, we start playback immediately but MUTED,
+        // then fade in once the preloader is actually hidden (or after a timeout).
+        const targets = [];
+        if (preloader) targets.push(preloader);
+        if (overlayHot && overlayHot !== preloader) targets.push(overlayHot);
+        const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.userAgent.includes("Mac") && "ontouchend" in document);
+
+        let armed = false;
+        const onEnter = (e) => {
+          // Arm only once
+          if (armed) return;
+          armed = true;
+
+          const FADE_MS = 800;
+          const NORMAL_HIDE_MS = 1150; // ≈ 600ms expand + 500ms fade
           const MAX_WAIT_MS = 4000;
 
-          let done = false;
-          let mo;
-          let pollId;
+          let mo, pollId;
 
           const cleanup = () => {
+            targets.forEach(t => t.removeEventListener("click", onEnter, captureOpts));
             if (mo) mo.disconnect();
             if (pollId) clearInterval(pollId);
           };
 
-          const start = () => {
-            if (done) return;
-            done = true;
+          const tryFade = () => {
+            if (onEnter._didFade) return;
+            onEnter._didFade = true;
+
+            if (IS_IOS) {
+              // We already started muted; just fade up.
+              fadeTo(1, FADE_MS);
+            } else {
+              // Start playback now (after hide) with a fade; may be blocked on iOS, but that's OK here.
+              playWithFade(FADE_MS);
+            }
             cleanup();
-            startAudioOnce();
           };
 
           const isHidden = () => {
             if (!preloader) return true;
-            // Hidden if removed or display:none
             if (!preloader.parentNode) return true;
             const cs = getComputedStyle(preloader);
             return cs.display === "none";
           };
 
-          const check = () => {
-            if (isHidden()) start();
-          };
+          const check = () => { if (isHidden()) tryFade(); };
 
-          // Observe style/class changes to detect when display becomes none
+          // iOS: start playback immediately but muted (so the later fade is guaranteed)
+          if (IS_IOS) {
+            const now = ac.currentTime;
+            try {
+              gain.gain.cancelScheduledValues(now);
+              gain.gain.setValueAtTime(0, now); // hard mute
+            } catch {}
+            ac.resume().catch(()=>{});
+            audioEl.play().catch(()=>{});
+            sessionStorage.setItem(PLAY_KEY, "1");
+          }
+          // Non‑iOS: do not start yet. We'll start when the preloader is actually hidden.
+
+          // Observe style/class changes to detect display:none, plus a light poll.
           if (preloader) {
             mo = new MutationObserver(check);
             mo.observe(preloader, { attributes: true, attributeFilter: ["style", "class"] });
           }
-
-          // Light polling as a safety net
           pollId = setInterval(check, 120);
-
-          // Immediate check (in case it's already hidden)
-          check();
+          check(); // in case it's already hidden
 
           // Timed fallbacks
-          setTimeout(start, HARD_FALLBACK_MS);      // normal path
-          setTimeout(start, MAX_WAIT_MS);          // absolute cap
-        }, { once: true });
+          setTimeout(tryFade, NORMAL_HIDE_MS); // normal path
+          setTimeout(tryFade, MAX_WAIT_MS);    // absolute cap
+        };
+
+        // Use capture so we receive the click even if inner elements stopPropagation.
+        const captureOpts = { once: true, capture: true };
+        targets.forEach(t => t.addEventListener("click", onEnter, captureOpts));
 
         // IMPORTANT: Do NOT add any global gesture fallbacks on pages with the preloader;
         // we only want audio after the official "enter" click finishes the hide.
@@ -482,16 +506,14 @@
         if (sessionStorage.getItem(PLAY_KEY) === "1") {
           audioEl.play().then(() => {
             ac.resume().catch(()=>{});
-            fadeIn();
+            fadeTo(1, 800);
           }).catch(() => {
             // Autoplay blocked by the browser. We intentionally DO NOT attach any
             // global "first click anywhere" handlers. The user must use the explicit
             // visualizer toggle control to start playback.
           });
         }
-        // If there is no previous play state (or autoplay was blocked),
-        // do nothing here. Playback can be started via [data-viz-toggle] only.
-        // (No global first‑gesture listeners.)
+        // Otherwise do nothing here: playback can be started via [data-viz-toggle] only.
       }
 
       // Auto-bind any [data-viz-toggle] controls on the page
