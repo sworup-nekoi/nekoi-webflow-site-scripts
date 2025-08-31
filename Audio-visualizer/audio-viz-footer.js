@@ -127,9 +127,11 @@
       const gain = ac.createGain();
       gain.gain.value = 0; // fade in after user gesture
 
-      source.connect(analyser);
-      analyser.connect(gain);
+      // Route audio so fades affect what the analyser "hears":
+      // source → gain → destination, and also tap analyser AFTER gain
+      source.connect(gain);
       gain.connect(ac.destination);
+      gain.connect(analyser); // analyser monitors post‑gain signal (reflects fade in/out)
 
       // === Exposed playback API (fade via GainNode; iOS-friendly) ==========
       function fadeTo(target, ms = 300) {
