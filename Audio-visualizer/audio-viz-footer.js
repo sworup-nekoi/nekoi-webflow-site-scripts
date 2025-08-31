@@ -6,6 +6,7 @@
   • Creates a canvas overlay that fills the wrapper (does not change layout)
   • Connects to <audio id="site-music"> (or the first audio[src]) and visualizes
   • Persists play/pause across pages and optionally restores position
+  • Alignment: set `--viz-align: left|right|center` (right mirrors order; center reserved)
 */
 (function () {
   if (window.__audioVizInit) return;              // guard: only once per page
@@ -69,7 +70,7 @@
       let BAR_A, BAR_B, CAP, CAP_GAP_PX, CAP_H_PX, CAP_DROP,
           PAD_X, GAP_X, MAX_BARS, MIN_BAR, BAND_CURVE, ALT_EVERY,
           AGC_ON, AGC_SMOOTH, AGC_MAX, SENSITIVITY, SMOOTHING,
-          QUIET_BOOST, MIN_ACTIVE_FRAC, MIN_ACTIVE_PX, IDLE_PX, SILENCE_THRESH;
+          QUIET_BOOST, MIN_ACTIVE_FRAC, MIN_ACTIVE_PX, IDLE_PX, SILENCE_THRESH, ALIGN;
 
       function readTheme() {
         BAR_A       = cssVar("--viz-bar",       "#fff");
@@ -101,6 +102,7 @@
 
         IDLE_PX        = lenVarPx("--viz-idle-px", 2);
         SILENCE_THRESH = Math.max(0, Math.min(0.2, parseFloat(cssVar("--viz-silence-thresh","0.02")) || 0.02));
+        ALIGN = (cssVar("--viz-align", "left") || "left").toLowerCase();
       }
       readTheme();
 
@@ -271,6 +273,7 @@
       // --- Loop -------------------------------------------------------------
       let capBottoms = [];
       let agcScale = 1;
+      let lastAlign = null;
       let themeTick = 0;
 
       function draw() {
@@ -286,6 +289,14 @@
         const innerW     = Math.max(1, w - PAD_X * 2);
         let   targetBars = Math.max(1, Math.floor(innerW / Math.max(1, MIN_BAR)));
         targetBars       = Math.min(MAX_BARS, targetBars);
+
+        // Determine visual order (left-to-right placement) based on ALIGN
+        let order = [];
+        for (let i = 0; i < targetBars; i++) order[i] = i;
+        if (ALIGN === "right") {
+          order.reverse(); // mirror: highest-index band appears at left; visually "hug right"
+        }
+        // (Optional future: ALIGN === "center" could interleave from center; for now defaults to left)
 
         const totalGapW  = GAP_X * Math.max(0, targetBars - 1);
         const barW       = Math.max(1, (innerW - totalGapW) / targetBars);
@@ -329,8 +340,9 @@
           .sort((a, b) => bandVals[b] - bandVals[a]);
         const activeSet = new Set(indices.slice(0, K));
 
-        for (let i = 0; i < targetBars; i++) {
-          const x = PAD_X + i * (barW + GAP_X);
+        for (let pos = 0; pos < targetBars; pos++) {
+          const i = order[pos]; // band index to read from
+          const x = PAD_X + pos * (barW + GAP_X);
 
           let barH, y;
           if (silent) {
@@ -343,7 +355,7 @@
             y = baseY - barH;
           }
 
-          const isAlt = (i % ALT_EVERY) === (ALT_EVERY - 1);
+          const isAlt = (pos % ALT_EVERY) === (ALT_EVERY - 1);
           ctx.fillStyle = isAlt ? BAR_B : BAR_A;
           ctx.fillRect(x, y, barW, barH);
 

@@ -46,6 +46,8 @@ html, body {
   --viz-alt-every:  2;                          /* 2 = alternate every other bar; 999 = no alternation */
   --viz-agc:        1;                          /* gentle auto-gain on/off */
   --viz-agc-smooth: 0.10;                       /* 0.05..0.2 feels nice */
+  /* Alignment: which side the bars hug: left | right | center */
+  --viz-align: left;
 
   /* Responsiveness on quiet content */
   --viz-sensitivity:     1.35;                  /* multiplies raw spectrum energy */
@@ -60,13 +62,13 @@ html, body {
 @media (max-width: 767px) {
   html, body {
     --viz-min-bar:       6px;                   /* allows more bars to fit */
-    --viz-sensitivity:   5.0;                   /* stronger response */
-    --viz-quiet-boost:   6.9;                   /* extra kick on very quiet frames */
-    --viz-smoothing:     0.20;                  /* a bit snappier */
+    --viz-sensitivity:   2.5;                   /* stronger response */
+    --viz-quiet-boost:   2.2;                   /* extra kick on very quiet frames */
+    --viz-smoothing:     0.35;                  /* a bit snappier */
     --viz-band-curve:    2.0;                   /* emphasize low-end */
-    --viz-agc-max:       24;                    /* let auto-gain push harder */
+    --viz-agc-max:       10;                    /* let auto-gain push harder */
     --viz-agc-smooth:    0.12;                  /* slightly quicker AGC */
-    --viz-min-active-frac: 0.66;                /* with ~3 bars → ~2 will move */
+    --viz-min-active-frac: 0.50;                /* with ~3 bars → ~2 will move */
     --viz-min-active-px:   clamp(2px, 0.9vmin, 6px); /* ensure visible motion */
   }
 }
