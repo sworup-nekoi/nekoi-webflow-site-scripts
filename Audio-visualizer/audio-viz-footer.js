@@ -473,9 +473,10 @@
             mo.observe(preloader, { attributes: true, attributeFilter: ["style", "class"] });
           }
           pollId = setInterval(() => { if (isHidden()) tryFade(); }, 120);
-          // Timed fallbacks
-          setTimeout(tryFade, NORMAL_HIDE_MS);
-          setTimeout(tryFade, MAX_WAIT_MS);
+          // Timed checks (fade ONLY if hidden)
+          const maybeFadeIfHidden = () => { if (isHidden()) tryFade(); };
+          setTimeout(maybeFadeIfHidden, NORMAL_HIDE_MS);
+          setTimeout(maybeFadeIfHidden, MAX_WAIT_MS);
         };
 
         // Use capture so we receive the click even if inner elements stopPropagation.
