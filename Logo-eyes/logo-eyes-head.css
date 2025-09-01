@@ -1,0 +1,52 @@
+
+
+/* =========================================
+   Logo Eyes + Misc (HEAD CSS)
+   This stylesheet is loaded via jsDelivr.
+   Safe to use across pages; JS reads --eye-move.
+   ========================================= */
+
+/* Logo eyes container covers the logo area and ignores pointer events */
+.logo-eyes {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Pupils are animated by JS with translate/scale */
+.logo-eyes .pupil {
+  will-change: transform;
+  transform: translate(0, 0) scale(1);
+}
+
+/* On touch devices, ensure the wrapper stays present */
+@media (hover: none), (pointer: coarse) {
+  .logo-eyes {
+    display: block;
+  }
+}
+
+/* Tuning token that the eyes script reads for max movement */
+:root {
+  --eye-move: clamp(4px, 0.8vmin, 14px);
+}
+
+/* Coordinate HUD (tabular digits so numbers don't wobble) */
+.xy-coordinate-wrapper .coordinate {
+  display: inline-block;
+  width: 5ch;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* Menu label sync: allow a shadow/ghost layer via data-shadow */
+.menu-label-sync {
+  position: relative;
+}
+.menu-label-sync[data-shadow]::after {
+  content: attr(data-shadow);
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
