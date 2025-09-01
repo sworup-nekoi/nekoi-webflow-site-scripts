@@ -13,14 +13,19 @@
   // Resolve a CSS custom property representing a *length* to pixels (supports clamp(), vw/vh/vmin)
   function readLenVarPx(scopeEl, varName) {
     try {
+      // Read the raw variable first; if it's missing, bail out with NaN (so we can fall back)
+      const raw = getComputedStyle(scopeEl).getPropertyValue(varName).trim();
+      if (!raw) return NaN;
+
       const probe = document.createElement("div");
       probe.style.position = "absolute";
       probe.style.visibility = "hidden";
-      probe.style.width = `var(${varName})`;
+      // Use the raw value directly (not var()) so missing vars don't silently become 0/auto.
+      probe.style.width = raw;
       scopeEl.appendChild(probe);
       const px = parseFloat(getComputedStyle(probe).width);
       probe.remove();
-      return Number.isFinite(px) ? px : NaN;
+      return Number.isFinite(px) && px > 0 ? px : NaN;
     } catch {
       return NaN;
     }
@@ -58,7 +63,7 @@
     // Movement range: CSS --eye-move (supports clamp) or auto-calc from geometry
     const host = wrap.closest(".logo-eyes") || wrap;
     let MOVEMENT = readLenVarPx(host, "--eye-move");
-    if (!Number.isFinite(MOVEMENT)) MOVEMENT = calcMovement();
+    if (!Number.isFinite(MOVEMENT) || MOVEMENT <= 0) MOVEMENT = calcMovement();
 
     // ----- STATE -----
     let tx = 0, ty = 0;           // target offsets
@@ -173,7 +178,7 @@
       () => {
         setTimeout(() => {
           const m = readLenVarPx(host, "--eye-move");
-          MOVEMENT = Number.isFinite(m) ? m : calcMovement();
+          MOVEMENT = (Number.isFinite(m) && m > 0) ? m : calcMovement();
         }, 0);
       },
       PASSIVE
