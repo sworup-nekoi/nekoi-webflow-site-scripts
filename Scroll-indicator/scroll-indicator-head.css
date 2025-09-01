@@ -1,0 +1,83 @@
+/* Scroll Indicators – Head CSS (CDN, animated accent variant)
+   Matches the Project Settings version with overlay + keyframes.
+   Works with JS that:
+     - toggles .is-at-end on .indicator-wrapper
+     - writes --ind-merge-shift (px) on the wrapper
+*/
+
+/* Wrapper-level knobs */
+.indicator-wrapper {
+  --ind-cycle: 2000ms;
+  --ind-ease: linear;
+
+  /* YOUR COLORS */
+  --indicator-off: var(--_theme---text-main); /* base/default color */
+  --indicator-on:  var(--_theme---outline);   /* active highlight */
+
+  /* merge-on-bottom knobs */
+  --ind-merge-shift: 0px; /* how far the rows slide to meet */
+  --ind-merge-in: 260ms;  /* slide duration */
+}
+
+/* Each line/square uses the base color */
+.indicator-wrapper .indicator {
+  position: relative;
+  background: var(--indicator-off);
+  border-radius: inherit; /* keep if you use rounding */
+}
+
+/* Accent overlay */
+.indicator-wrapper .indicator::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--indicator-on);
+  opacity: 0;
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+/* TOP row first */
+.indicator-wrapper .indicator-top-wrapper .indicator::after {
+  animation: indTop var(--ind-cycle) var(--ind-ease) infinite;
+}
+
+/* BOTTOM single next */
+.indicator-wrapper > .indicator::after {
+  animation: indBottom var(--ind-cycle) var(--ind-ease) infinite;
+}
+
+/* Merge-on-bottom behavior */
+.indicator-top-wrapper,
+.indicator-wrapper > .indicator {
+  transition: transform var(--ind-merge-in) var(--ind-ease, linear);
+}
+.indicator-wrapper.is-at-end .indicator-top-wrapper {
+  transform: translateY(var(--ind-merge-shift));
+}
+.indicator-wrapper.is-at-end > .indicator {
+  transform: translateY(calc(-1 * var(--ind-merge-shift)));
+}
+
+/* Timing windows */
+@keyframes indTop {
+  0%   { opacity: 0; }
+  4%   { opacity: 0; animation-timing-function: cubic-bezier(0.22, 0.61, 0.36, 1); }
+  5%   { opacity: 1; }
+  40%  { opacity: 1; animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1); }
+  41%  { opacity: 0; }
+  100% { opacity: 0; }
+}
+@keyframes indBottom {
+  0%   { opacity: 0; }
+  39%  { opacity: 0; animation-timing-function: cubic-bezier(0.55, 0.01, 0.14, 1); }
+  40%  { opacity: 1; }
+  65%  { opacity: 1; animation-timing-function: cubic-bezier(0.55, 0.01, 0.14, 1); }
+  66%  { opacity: 0; }
+  100% { opacity: 0; }
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .indicator-wrapper .indicator::after { animation: none; }
+}
