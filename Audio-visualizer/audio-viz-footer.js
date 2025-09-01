@@ -187,6 +187,26 @@
         el.setAttribute("role", "button");
         if (!el.hasAttribute("tabindex")) el.tabIndex = 0;
 
+        // iOS/Android gesture unlock: prime audio context on first touch/pointer
+        // This ensures later programmatic play() calls succeed when no preloader is present.
+        const primeOnce = () => {
+          try {
+            // resume context; force gain to 0 so no audible blip
+            ac.resume().catch(()=>{});
+            const now = ac.currentTime;
+            try {
+              gain.gain.cancelScheduledValues(now);
+              gain.gain.setValueAtTime(0, now);
+            } catch {}
+            // play then immediately pause to satisfy mobile autoplay policies
+            audioEl.play().then(() => {
+              setTimeout(() => { try { audioEl.pause(); } catch {} }, 0);
+            }).catch(()=>{});
+          } catch {}
+        };
+        el.addEventListener("touchstart", primeOnce, { passive: true, once: true });
+        el.addEventListener("pointerdown", primeOnce, { passive: true, once: true });
+
         let lastTouchTime = 0;
         const stopAll = (e) => {
           if (!e) return;
