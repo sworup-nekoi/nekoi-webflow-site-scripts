@@ -35,6 +35,22 @@
         audioEl.setAttribute("webkit-playsinline", "");
       } catch {}
 
+      // Promote data-src → src and kick loading when the first user gesture happens
+      function ensureAudioReady() {
+        try {
+          const hasRealSrc = !!audioEl.getAttribute("src");
+          const ds = audioEl.getAttribute("data-src");
+          if (ds && (!hasRealSrc || audioEl.src === "" || audioEl.src === location.href)) {
+            audioEl.setAttribute("src", ds);
+          }
+          if (audioEl.preload === "none") {
+            audioEl.preload = "auto";
+          }
+          // Force the element to acknowledge the (possibly new) src
+          audioEl.load();
+        } catch {}
+      }
+
       // --- Persistence keys -------------------------------------------------
       const PLAY_KEY = "viz:was-playing";
       const TIME_KEY = "viz:last-time";      // optional: restore position
@@ -147,6 +163,7 @@
       }
 
       async function playWithFade(ms = 800) {
+        try { ensureAudioReady(); } catch {}
         try { await ac.resume(); } catch {}
         try { await audioEl.play(); } catch {}
         sessionStorage.setItem(PLAY_KEY, "1");
@@ -191,6 +208,8 @@
         // This ensures later programmatic play() calls succeed when no preloader is present.
         const primeOnce = () => {
           try {
+            // make sure <audio> has a real src and is allowed to load
+            ensureAudioReady();
             // resume context; force gain to 0 so no audible blip
             ac.resume().catch(()=>{});
             const now = ac.currentTime;
@@ -251,6 +270,7 @@
         playWithFade,
         pauseWithFade,
         initToggle,
+        ensureAudioReady,
       };
 
       // --- Sizing / DPR -----------------------------------------------------
@@ -462,6 +482,8 @@
           const onEnter = (e) => {
             if (armed) return;
             armed = true;
+            // make sure a real source is present and loading
+            try { ensureAudioReady(); } catch {}
             // Mute immediately; start playback inside this user gesture
             const now = ac.currentTime;
             try {
@@ -528,6 +550,7 @@
       } else {
         // No preloader on this page: resume only if user had music playing.
         if (sessionStorage.getItem(PLAY_KEY) === "1") {
+          try { ensureAudioReady(); } catch {}
           audioEl.play().then(() => {
             ac.resume().catch(()=>{});
             fadeTo(1, 800);
