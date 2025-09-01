@@ -49,6 +49,12 @@
     const MIN_SCALE = 1.0;
     const MAX_SCALE = 1.2;
 
+    // Eased blink tuning
+    const BLINK_HOLD_MS = 60;      // how long lids stay fully closed
+    const BLINK_OPEN_SMOOTH  = 0.22;  // easing for opening (smaller = quicker)
+    const BLINK_CLOSE_SMOOTH = 0.35;  // easing for closing (smaller = quicker)
+    const MIN_LID = 0.06;            // how “closed” the lids get (0 = fully flat)
+
     // Movement range: CSS --eye-move (supports clamp) or auto-calc from geometry
     const host = wrap.closest(".logo-eyes") || wrap;
     let MOVEMENT = readLenVarPx(host, "--eye-move");
@@ -58,14 +64,21 @@
     let tx = 0, ty = 0;           // target offsets
     let x = 0,  y = 0;            // animated offsets
     let scl = 1;                  // pupil scale (desktop "dilate" toward pointer)
-    let sclY = 1;                 // vertical squish for blinks
+    let sclY = 1;                 // vertical squish for blinks (current)
+    let sclYGoal = 1;             // target eyelid scaleY (for eased blink)
     let idleTimer = null;
     let dartTimer = null;
 
     // Animation loop (per wrapper)
     (function raf() {
+      // position smoothing
       x += (tx - x) * SMOOTH;
       y += (ty - y) * SMOOTH;
+
+      // eyelid easing: use different speeds for closing vs opening
+      const ease = sclYGoal < sclY ? BLINK_CLOSE_SMOOTH : BLINK_OPEN_SMOOTH;
+      sclY += (sclYGoal - sclY) * ease;
+
       const t = `translate(${x}px, ${y}px) scale(${scl}) scaleY(${sclY})`;
       for (let i = 0; i < pupils.length; i++) pupils[i].style.transform = t;
       requestAnimationFrame(raf);
@@ -130,15 +143,29 @@
     // Start idle timer
     armIdle();
 
-    // Blink (randomized)
-    const jitter = () => BLINK_INTERVAL + Math.random() * 2000;
-    setTimeout(function tick() {
-      sclY = 0.1;
-      setTimeout(() => {
-        sclY = 1;
-      }, BLINK_DURATION);
-      setTimeout(tick, jitter());
-    }, jitter());
+    // Blink (randomized, eased with occasional natural double‑blink)
+    (function scheduleBlink() {
+      const jitter = () => BLINK_INTERVAL + Math.random() * 2000;
+
+      function blinkOnce(then) {
+        // ease closed → hold → ease open
+        sclYGoal = MIN_LID;
+        setTimeout(() => {
+          sclYGoal = 1;
+          if (then) setTimeout(then, 40 + Math.random() * 120); // brief pause before second blink
+        }, BLINK_HOLD_MS);
+      }
+
+      setTimeout(function tick() {
+        if (Math.random() < 0.15) {
+          // ~15% chance of a double blink
+          blinkOnce(() => blinkOnce());
+        } else {
+          blinkOnce();
+        }
+        setTimeout(tick, jitter());
+      }, jitter());
+    })();
 
     // Recalc movement on resize (re-read CSS var or auto-calc)
     window.addEventListener(
