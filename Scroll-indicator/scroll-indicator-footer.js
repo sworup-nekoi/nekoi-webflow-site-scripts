@@ -101,17 +101,40 @@
       }
       if ('IntersectionObserver' in window) {
         if (io) io.disconnect();
-        io = new IntersectionObserver((entries) => {
-          const e = entries[0];
-          if (!e) return;
-          sentinelAtEnd = !!e.isIntersecting;
-          updateEndClass();
-        }, {
-          // Respect iOS home-indicator safe area just in case
-          rootMargin: '0px 0px calc(env(safe-area-inset-bottom,0) + 1px) 0px',
-          threshold: 0.999
-        });
-        io.observe(s);
+
+        // Read CSS var safely (falls back to 0px if missing)
+        function getSafeBottomPx() {
+          try {
+            const cs = getComputedStyle(document.documentElement);
+            const v = (cs.getPropertyValue('--safe-bottom') || '0px').trim();
+            const n = parseFloat(v);
+            return Number.isFinite(n) ? n : 0;
+          } catch (_) {
+            return 0;
+          }
+        }
+
+        const bottomPad = Math.max(1, Math.round(getSafeBottomPx()) + 1); // ensure >=1px
+
+        try {
+          io = new IntersectionObserver(
+            (entries) => {
+              const e = entries[0];
+              if (!e) return;
+              sentinelAtEnd = !!e.isIntersecting;
+              updateEndClass();
+            },
+            {
+              // IntersectionObserver requires px or % — build a px string
+              rootMargin: `0px 0px ${bottomPad}px 0px`,
+              threshold: 0.999,
+            }
+          );
+          io.observe(s);
+        } catch (err) {
+          console.warn('IntersectionObserver init failed; falling back', err);
+          io = null; // fallback to math-only end detection
+        }
       }
     }
 
