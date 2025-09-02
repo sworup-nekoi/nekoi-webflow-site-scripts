@@ -77,6 +77,9 @@
 .indicator-wrapper > .indicator {
   transition: transform var(--ind-merge-in) var(--ind-ease, linear);
   will-change: transform;
+  transform: translateZ(0);
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
 }
 .indicator-wrapper.is-at-end .indicator-top-wrapper {
   transform: translate3d(0, var(--ind-merge-shift), 0);

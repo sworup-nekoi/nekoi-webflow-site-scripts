@@ -70,13 +70,15 @@
       // Read geometry without transforms applied
       const a = topWrap.getBoundingClientRect();
       const b = bottom.getBoundingClientRect();
-      const topMid = (a.top + a.bottom) / 2;
-      const botMid = (b.top + b.bottom) / 2;
+      const topBottom = a.bottom;
+      const bottomTop = b.top;
 
       // Snap to the device-pixel grid to avoid fractional wobble on mobile
       const dpr = Math.max(1, Math.round(window.devicePixelRatio || 1));
       const snap = (n) => Math.round(n * dpr) / dpr;
-      const shift = Math.max(0, snap((botMid - topMid) / 2)); // symmetric meet
+
+      const gap = bottomTop - topBottom; // positive gap between rows
+      const shift = Math.max(0, snap(gap / 2)); // symmetric meet
 
       // Restore state and write the CSS variable used by the CSS translation
       if (wasAtEnd) wrapper.classList.add("is-at-end");
@@ -85,6 +87,39 @@
 
     function calcAll() {
       wrappers.forEach(calcShift);
+    }
+
+    // After we toggle the end state, measure transformed positions and micro-adjust
+    function microAdjust(wrapper) {
+      const topWrap = wrapper.querySelector('.indicator-top-wrapper');
+      if (!topWrap) return;
+      const bottom = Array.from(wrapper.querySelectorAll('.indicator')).find((el) => !topWrap.contains(el));
+      if (!bottom) return;
+
+      // Only adjust when merged
+      if (!wrapper.classList.contains('is-at-end')) return;
+
+      const dpr = Math.max(1, Math.round(window.devicePixelRatio || 1));
+      const snap = (n) => Math.round(n * dpr) / dpr;
+      const eps = 0.5 / dpr; // ignore sub-half-pixel noise
+
+      // Current variable value
+      const cs = getComputedStyle(wrapper);
+      const current = parseFloat(cs.getPropertyValue('--ind-merge-shift')) || 0;
+
+      // Measure AFTER transforms are applied
+      const aBottom = topWrap.getBoundingClientRect().bottom;
+      const bTop = bottom.getBoundingClientRect().top;
+      const error = bTop - aBottom; // +gap / -overlap
+
+      if (Math.abs(error) <= eps) return;
+
+      const adjusted = snap(current + error / 2);
+      wrapper.style.setProperty('--ind-merge-shift', `${adjusted}px`);
+    }
+
+    function microAdjustAll() {
+      wrappers.forEach(microAdjust);
     }
 
     // IntersectionObserver sentinel for rock-solid end detection
@@ -143,12 +178,22 @@
     function updateEndClass() {
       const on = sentinelAtEnd || isAtPageEnd();
 
-      // Recompute shifts the first time we enter the end state
+      // Recompute shifts when entering end state (pre-transform metrics)
       if (on && !endWasOn) {
         calcAll();
       }
 
       wrappers.forEach((w) => w.classList.toggle('is-at-end', on));
+
+      // After the CSS transition finishes, measure transformed positions once and micro-correct
+      // Use a small timer close to --ind-merge-in (260ms) with cushion
+      if (on) {
+        clearTimeout(updateEndClass._t);
+        updateEndClass._t = setTimeout(() => {
+          microAdjustAll();
+        }, 320);
+      }
+
       endWasOn = on;
     }
 
