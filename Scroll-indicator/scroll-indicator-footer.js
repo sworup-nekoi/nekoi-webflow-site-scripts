@@ -83,6 +83,8 @@
       // Restore state and write the CSS variable used by the CSS translation
       if (wasAtEnd) wrapper.classList.add("is-at-end");
       wrapper.style.setProperty("--ind-merge-shift", `${shift}px`);
+      wrapper.style.setProperty("--ind-merge-shift-top", `${shift}px`);
+      wrapper.style.setProperty("--ind-merge-shift-bottom", `${shift}px`);
     }
 
     function calcAll() {
@@ -105,7 +107,10 @@
 
       // Current variable value
       const cs = getComputedStyle(wrapper);
-      const current = parseFloat(cs.getPropertyValue('--ind-merge-shift')) || 0;
+      let current = parseFloat(cs.getPropertyValue('--ind-merge-shift-top'));
+      if (!Number.isFinite(current)) {
+        current = parseFloat(cs.getPropertyValue('--ind-merge-shift')) || 0;
+      }
 
       // Measure AFTER transforms are applied
       const aBottom = topWrap.getBoundingClientRect().bottom;
@@ -115,7 +120,7 @@
       if (Math.abs(error) <= eps) return;
 
       const adjusted = snap(current + error / 2);
-      wrapper.style.setProperty('--ind-merge-shift', `${adjusted}px`);
+      wrapper.style.setProperty('--ind-merge-shift-top', `${adjusted}px`);
     }
 
     function microAdjustAll() {

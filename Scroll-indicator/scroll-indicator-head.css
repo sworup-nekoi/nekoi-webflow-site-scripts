@@ -37,6 +37,9 @@
   /* merge-on-bottom knobs */
   --ind-merge-shift: 0px; /* how far the rows slide to meet */
   --ind-merge-in: 260ms;  /* slide duration */
+  /* independent shifts (fallbacks preserve old behavior) */
+  --ind-merge-shift-top: var(--ind-merge-shift);
+  --ind-merge-shift-bottom: var(--ind-merge-shift);
   contain: layout style paint;
 }
 
@@ -82,10 +85,10 @@
   backface-visibility: hidden;
 }
 .indicator-wrapper.is-at-end .indicator-top-wrapper {
-  transform: translate3d(0, var(--ind-merge-shift), 0);
+  transform: translate3d(0, var(--ind-merge-shift-top), 0);
 }
 .indicator-wrapper.is-at-end > .indicator {
-  transform: translate3d(0, calc(-1 * var(--ind-merge-shift)), 0);
+  transform: translate3d(0, calc(-1 * var(--ind-merge-shift-bottom)), 0);
 }
 
 /* Timing windows */
