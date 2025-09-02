@@ -78,128 +78,26 @@
       const snap = (n) => Math.round(n * dpr) / dpr;
 
       const gap = bottomTop - topBottom; // positive gap between rows
-      const shift = Math.max(0, snap(gap / 2)); // symmetric meet
+      const shiftTop = Math.max(0, snap(gap)); // move ONLY the top row by the full gap
 
-      // Restore state and write the CSS variable used by the CSS translation
+      // Restore state and write the CSS variables used by the CSS translation
       if (wasAtEnd) wrapper.classList.add("is-at-end");
-      wrapper.style.setProperty("--ind-merge-shift", `${shift}px`);
-      wrapper.style.setProperty("--ind-merge-shift-top", `${shift}px`);
-      wrapper.style.setProperty("--ind-merge-shift-bottom", `${shift}px`);
+      // For compatibility, keep --ind-merge-shift equal to the top shift
+      wrapper.style.setProperty("--ind-merge-shift", `${shiftTop}px`);
+      wrapper.style.setProperty("--ind-merge-shift-top", `${shiftTop}px`);
+      wrapper.style.setProperty("--ind-merge-shift-bottom", `0px`);
     }
 
     function calcAll() {
       wrappers.forEach(calcShift);
     }
 
-    // After we toggle the end state, measure transformed positions and micro-adjust
-    function microAdjust(wrapper) {
-      const topWrap = wrapper.querySelector('.indicator-top-wrapper');
-      if (!topWrap) return;
-      const bottom = Array.from(wrapper.querySelectorAll('.indicator')).find((el) => !topWrap.contains(el));
-      if (!bottom) return;
-
-      // Only adjust when merged
-      if (!wrapper.classList.contains('is-at-end')) return;
-
-      const dpr = Math.max(1, Math.round(window.devicePixelRatio || 1));
-      const snap = (n) => Math.round(n * dpr) / dpr;
-      const eps = 0.5 / dpr; // ignore sub-half-pixel noise
-
-      // Current variable value
-      const cs = getComputedStyle(wrapper);
-      let current = parseFloat(cs.getPropertyValue('--ind-merge-shift-top'));
-      if (!Number.isFinite(current)) {
-        current = parseFloat(cs.getPropertyValue('--ind-merge-shift')) || 0;
-      }
-
-      // Measure AFTER transforms are applied
-      const aBottom = topWrap.getBoundingClientRect().bottom;
-      const bTop = bottom.getBoundingClientRect().top;
-      const error = bTop - aBottom; // +gap / -overlap
-
-      if (Math.abs(error) <= eps) return;
-
-      const adjusted = snap(current + error / 2);
-      wrapper.style.setProperty('--ind-merge-shift-top', `${adjusted}px`);
-    }
-
-    function microAdjustAll() {
-      wrappers.forEach(microAdjust);
-    }
-
     // IntersectionObserver sentinel for rock-solid end detection
-    let endWasOn = false;
-    let sentinelAtEnd = false;
-    let io = null;
-    function ensureSentinel() {
-      if (!document.body) return;
-      let s = document.getElementById('scroll-end-sentinel-js');
-      if (!s) {
-        s = document.createElement('div');
-        s.id = 'scroll-end-sentinel-js';
-        // Tiny block that sits at the very end of the document flow
-        s.style.cssText = 'height:1px;width:1px;';
-        document.body.appendChild(s);
-      }
-      if ('IntersectionObserver' in window) {
-        if (io) io.disconnect();
-
-        // Read CSS var safely (falls back to 0px if missing)
-        function getSafeBottomPx() {
-          try {
-            const cs = getComputedStyle(document.documentElement);
-            const v = (cs.getPropertyValue('--safe-bottom') || '0px').trim();
-            const n = parseFloat(v);
-            return Number.isFinite(n) ? n : 0;
-          } catch (_) {
-            return 0;
-          }
-        }
-
-        const bottomPad = Math.max(1, Math.round(getSafeBottomPx()) + 1); // ensure >=1px
-
-        try {
-          io = new IntersectionObserver(
-            (entries) => {
-              const e = entries[0];
-              if (!e) return;
-              sentinelAtEnd = !!e.isIntersecting;
-              updateEndClass();
-            },
-            {
-              // IntersectionObserver requires px or % — build a px string
-              rootMargin: `0px 0px ${bottomPad}px 0px`,
-              threshold: 0.999,
-            }
-          );
-          io.observe(s);
-        } catch (err) {
-          console.warn('IntersectionObserver init failed; falling back', err);
-          io = null; // fallback to math-only end detection
-        }
-      }
-    }
+    // (Removed per instructions)
 
     function updateEndClass() {
-      const on = sentinelAtEnd || isAtPageEnd();
-
-      // Recompute shifts when entering end state (pre-transform metrics)
-      if (on && !endWasOn) {
-        calcAll();
-      }
-
+      const on = isAtPageEnd();
       wrappers.forEach((w) => w.classList.toggle('is-at-end', on));
-
-      // After the CSS transition finishes, measure transformed positions once and micro-correct
-      // Use a small timer close to --ind-merge-in (260ms) with cushion
-      if (on) {
-        clearTimeout(updateEndClass._t);
-        updateEndClass._t = setTimeout(() => {
-          microAdjustAll();
-        }, 320);
-      }
-
-      endWasOn = on;
     }
 
     // Robust scheduling
@@ -217,7 +115,7 @@
 
     function settleAll() {
       queryWrappers();
-      ensureSentinel();
+      // ensureSentinel();  // Removed per instructions
       // run now and again after a couple of frames for safety
       scheduleAll();
       setTimeout(scheduleAll, 50);

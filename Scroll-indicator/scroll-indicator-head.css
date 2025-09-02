@@ -37,9 +37,9 @@
   /* merge-on-bottom knobs */
   --ind-merge-shift: 0px; /* how far the rows slide to meet */
   --ind-merge-in: 260ms;  /* slide duration */
-  /* independent shifts (fallbacks preserve old behavior) */
+  /* independent shifts: top moves, bottom stays fixed */
   --ind-merge-shift-top: var(--ind-merge-shift);
-  --ind-merge-shift-bottom: var(--ind-merge-shift);
+  --ind-merge-shift-bottom: 0px;
   contain: layout style paint;
 }
 
