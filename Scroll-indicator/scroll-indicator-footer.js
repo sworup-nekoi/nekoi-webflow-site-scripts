@@ -70,22 +70,37 @@
       // Read geometry without transforms applied
       const a = topWrap.getBoundingClientRect();
       const b = bottom.getBoundingClientRect();
-      // Prefer measuring the actual bottom-most top-row bar, not the wrapper edge
-      let topBottom;
-      const topBars = Array.from(topWrap.querySelectorAll('.indicator'));
-      if (topBars.length) {
-        // Use the maximum bottom among children (in case of different heights)
-        topBottom = topBars.reduce((m, el) => {
+
+      // Helper: find edges using *thinnest* visible descendants (works with responsive sizes)
+      function thinEdges(root) {
+        const nodes = Array.from(root.querySelectorAll('*'));
+        if (!nodes.length) return null;
+        let minH = Infinity;
+        const rects = [];
+        for (const el of nodes) {
           const r = el.getBoundingClientRect();
-          return Math.max(m, r.bottom);
-        }, -Infinity);
-        if (!Number.isFinite(topBottom)) topBottom = a.bottom;
-      } else {
-        topBottom = a.bottom;
+          const h = r.height;
+          if (h > 0) {
+            rects.push(r);
+            if (h < minH) minH = h;
+          }
+        }
+        if (!rects.length || !Number.isFinite(minH)) return null;
+        // Keep elements within ~10% of the thinnest height (likely the bars)
+        const tol = minH * 1.1;
+        const thin = rects.filter(r => r.height <= tol);
+        return {
+          topMin: Math.min.apply(null, thin.map(r => r.top)),
+          bottomMax: Math.max.apply(null, thin.map(r => r.bottom))
+        };
       }
 
-      // For the bottom, measure the element itself (top edge of the visible bar)
-      const bottomTop = b.top;
+      const topThin = thinEdges(topWrap);
+      const botThin = thinEdges(bottom);
+
+      // Prefer thin-descendant edges; fall back to container edges
+      const topBottom = topThin ? topThin.bottomMax : a.bottom;
+      let bottomTop = botThin ? botThin.topMin : b.top;
 
       // Snap to the device-pixel grid to avoid fractional wobble on mobile
       const dpr = Math.max(1, Math.round(window.devicePixelRatio || 1));
