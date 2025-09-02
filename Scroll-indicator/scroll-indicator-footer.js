@@ -1,5 +1,3 @@
-
-
 (function () {
   if (window.__scrollIndicatorsInit) return;
   window.__scrollIndicatorsInit = true;
@@ -11,6 +9,28 @@
 
   ready(function () {
     const root = document.documentElement;
+
+    const scroller = document.scrollingElement || document.documentElement;
+
+    // Use visual viewport when available to avoid mobile URL-bar drift
+    function viewportH() {
+      return (window.visualViewport && window.visualViewport.height) ||
+             window.innerHeight ||
+             root.clientHeight;
+    }
+
+    function docH() {
+      return Math.max(
+        scroller.scrollHeight,
+        root.scrollHeight,
+        document.body ? document.body.scrollHeight : 0
+      );
+    }
+
+    function scrollTop() {
+      return (typeof window.scrollY === 'number' ? window.scrollY : scroller.scrollTop) || 0;
+    }
+
     const AT_END_PAD = 2; // px tolerance so it feels responsive
 
     let wrappers = [];
@@ -20,15 +40,16 @@
     }
 
     function isAtPageEnd() {
-      const scrollY = window.scrollY || window.pageYOffset;
-      const viewH = window.innerHeight || root.clientHeight;
-      const docH = Math.max(
-        root.scrollHeight,
-        root.offsetHeight,
-        root.clientHeight,
-        document.body ? Math.max(document.body.scrollHeight, document.body.offsetHeight) : 0
-      );
-      return scrollY + viewH >= docH - AT_END_PAD;
+      const st = scrollTop();
+      const vh = viewportH();
+      const sh = docH();
+
+      const max = Math.max(1, sh - vh);
+      // Snap when within a few pixels to kill wobble from URL bar / rubber-band
+      const thresholdPx = 3; // tune if needed
+      if (max - st <= thresholdPx) return true;
+
+      return st >= max;
     }
 
     // Compute how far the rows must move to meet in a straight line
@@ -65,13 +86,43 @@
       wrappers.forEach(calcShift);
     }
 
+    // IntersectionObserver sentinel for rock-solid end detection
+    let sentinelAtEnd = false;
+    let io = null;
+    function ensureSentinel() {
+      if (!document.body) return;
+      let s = document.getElementById('scroll-end-sentinel-js');
+      if (!s) {
+        s = document.createElement('div');
+        s.id = 'scroll-end-sentinel-js';
+        // Tiny block that sits at the very end of the document flow
+        s.style.cssText = 'height:1px;width:1px;';
+        document.body.appendChild(s);
+      }
+      if ('IntersectionObserver' in window) {
+        if (io) io.disconnect();
+        io = new IntersectionObserver((entries) => {
+          const e = entries[0];
+          if (!e) return;
+          sentinelAtEnd = !!e.isIntersecting;
+          updateEndClass();
+        }, {
+          // Respect iOS home-indicator safe area just in case
+          rootMargin: '0px 0px calc(env(safe-area-inset-bottom,0) + 1px) 0px',
+          threshold: 0.999
+        });
+        io.observe(s);
+      }
+    }
+
     function updateEndClass() {
-      const on = isAtPageEnd();
-      wrappers.forEach((w) => w.classList.toggle("is-at-end", on));
+      const on = sentinelAtEnd || isAtPageEnd();
+      wrappers.forEach((w) => w.classList.toggle('is-at-end', on));
     }
 
     // Robust scheduling
     let queued = false;
+
     function scheduleAll() {
       if (queued) return;
       queued = true;
@@ -84,6 +135,7 @@
 
     function settleAll() {
       queryWrappers();
+      ensureSentinel();
       // run now and again after a couple of frames for safety
       scheduleAll();
       setTimeout(scheduleAll, 50);
@@ -118,8 +170,7 @@
     window.addEventListener(
       "scroll",
       () => {
-        const on = isAtPageEnd();
-        wrappers.forEach((w) => w.classList.toggle("is-at-end", on));
+        updateEndClass();
       },
       { passive: true }
     );

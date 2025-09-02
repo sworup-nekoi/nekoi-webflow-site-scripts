@@ -5,6 +5,23 @@
      - writes --ind-merge-shift (px) on the wrapper
 */
 
+/* Mobile safe-area helpers (for docked indicators) */
+:root {
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* If you place the wrapper directly as a fixed footer indicator, add this class */
+.indicator-dock--bottom {
+  position: fixed;
+  left: max(12px, var(--safe-left));
+  right: max(12px, var(--safe-right));
+  bottom: calc(var(--safe-bottom) + var(--ind-bottom-gap, 12px));
+  z-index: 9999;
+  pointer-events: none; /* overlay only; remove if the element needs clicks */
+}
+
 /* Wrapper-level knobs */
 .indicator-wrapper {
   --ind-cycle: 2000ms;
@@ -17,6 +34,7 @@
   /* merge-on-bottom knobs */
   --ind-merge-shift: 0px; /* how far the rows slide to meet */
   --ind-merge-in: 260ms;  /* slide duration */
+  contain: layout style paint;
 }
 
 /* Each line/square uses the base color */
@@ -24,6 +42,8 @@
   position: relative;
   background: var(--indicator-off);
   border-radius: inherit; /* keep if you use rounding */
+  will-change: transform, opacity;
+  transform: translateZ(0);
 }
 
 /* Accent overlay */
@@ -35,6 +55,8 @@
   opacity: 0;
   pointer-events: none;
   border-radius: inherit;
+  will-change: opacity;
+  transform: translateZ(0);
 }
 
 /* TOP row first */
@@ -51,12 +73,13 @@
 .indicator-top-wrapper,
 .indicator-wrapper > .indicator {
   transition: transform var(--ind-merge-in) var(--ind-ease, linear);
+  will-change: transform;
 }
 .indicator-wrapper.is-at-end .indicator-top-wrapper {
-  transform: translateY(var(--ind-merge-shift));
+  transform: translate3d(0, var(--ind-merge-shift), 0);
 }
 .indicator-wrapper.is-at-end > .indicator {
-  transform: translateY(calc(-1 * var(--ind-merge-shift)));
+  transform: translate3d(0, calc(-1 * var(--ind-merge-shift)), 0);
 }
 
 /* Timing windows */
