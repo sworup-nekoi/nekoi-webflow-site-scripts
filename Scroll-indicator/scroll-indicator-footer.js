@@ -70,7 +70,21 @@
       // Read geometry without transforms applied
       const a = topWrap.getBoundingClientRect();
       const b = bottom.getBoundingClientRect();
-      const topBottom = a.bottom;
+      // Prefer measuring the actual bottom-most top-row bar, not the wrapper edge
+      let topBottom;
+      const topBars = Array.from(topWrap.querySelectorAll('.indicator'));
+      if (topBars.length) {
+        // Use the maximum bottom among children (in case of different heights)
+        topBottom = topBars.reduce((m, el) => {
+          const r = el.getBoundingClientRect();
+          return Math.max(m, r.bottom);
+        }, -Infinity);
+        if (!Number.isFinite(topBottom)) topBottom = a.bottom;
+      } else {
+        topBottom = a.bottom;
+      }
+
+      // For the bottom, measure the element itself (top edge of the visible bar)
       const bottomTop = b.top;
 
       // Snap to the device-pixel grid to avoid fractional wobble on mobile
