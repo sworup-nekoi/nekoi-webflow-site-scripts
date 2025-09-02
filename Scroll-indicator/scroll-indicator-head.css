@@ -1,29 +1,9 @@
-/* Scroll Indicators – Head CSS (CDN, animated accent variant)
+/* Scroll Indicators â€“ Head CSS (CDN, animated accent variant)
    Matches the Project Settings version with overlay + keyframes.
    Works with JS that:
      - toggles .is-at-end on .indicator-wrapper
      - writes --ind-merge-shift (px) on the wrapper
 */
-
-/* Mobile safe-area helpers (for docked indicators) */
-:root {
-  --safe-left: env(safe-area-inset-left, 0px);
-  --safe-right: env(safe-area-inset-right, 0px);
-  --safe-bottom: env(safe-area-inset-bottom, 0px);
-  --ind-bottom-gap: 12px; /* default dock gap; override per page if needed */
-}
-
-/* If you place the wrapper directly as a fixed footer indicator, add this class */
-.indicator-dock--bottom {
-  position: fixed;
-  left: max(12px, var(--safe-left));
-  right: max(12px, var(--safe-right));
-  bottom: calc(var(--safe-bottom) + var(--ind-bottom-gap, 12px));
-  z-index: 9999;
-  pointer-events: none; /* overlay only; remove if the element needs clicks */
-  transform: translateZ(0);
-  will-change: transform;
-}
 
 /* Wrapper-level knobs */
 .indicator-wrapper {
@@ -37,10 +17,6 @@
   /* merge-on-bottom knobs */
   --ind-merge-shift: 0px; /* how far the rows slide to meet */
   --ind-merge-in: 260ms;  /* slide duration */
-  /* independent shifts: top moves, bottom stays fixed */
-  --ind-merge-shift-top: var(--ind-merge-shift);
-  --ind-merge-shift-bottom: 0px;
-  contain: layout style paint;
 }
 
 /* Each line/square uses the base color */
@@ -48,8 +24,6 @@
   position: relative;
   background: var(--indicator-off);
   border-radius: inherit; /* keep if you use rounding */
-  will-change: transform, opacity;
-  transform: translateZ(0);
 }
 
 /* Accent overlay */
@@ -61,8 +35,6 @@
   opacity: 0;
   pointer-events: none;
   border-radius: inherit;
-  will-change: opacity;
-  transform: translateZ(0);
 }
 
 /* TOP row first */
@@ -79,16 +51,12 @@
 .indicator-top-wrapper,
 .indicator-wrapper > .indicator {
   transition: transform var(--ind-merge-in) var(--ind-ease, linear);
-  will-change: transform;
-  transform: translateZ(0);
-  -webkit-backface-visibility: hidden;
-  backface-visibility: hidden;
 }
 .indicator-wrapper.is-at-end .indicator-top-wrapper {
-  transform: translate3d(0, var(--ind-merge-shift-top), 0);
+  transform: translateY(var(--ind-merge-shift));
 }
 .indicator-wrapper.is-at-end > .indicator {
-  transform: translate3d(0, calc(-1 * var(--ind-merge-shift-bottom)), 0);
+  transform: translateY(calc(-1 * var(--ind-merge-shift)));
 }
 
 /* Timing windows */

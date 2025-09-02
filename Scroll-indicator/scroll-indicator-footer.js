@@ -9,28 +9,6 @@
 
   ready(function () {
     const root = document.documentElement;
-
-    const scroller = document.scrollingElement || document.documentElement;
-
-    // Use visual viewport when available to avoid mobile URL-bar drift
-    function viewportH() {
-      return (window.visualViewport && window.visualViewport.height) ||
-             window.innerHeight ||
-             root.clientHeight;
-    }
-
-    function docH() {
-      return Math.max(
-        scroller.scrollHeight,
-        root.scrollHeight,
-        document.body ? document.body.scrollHeight : 0
-      );
-    }
-
-    function scrollTop() {
-      return (typeof window.scrollY === 'number' ? window.scrollY : scroller.scrollTop) || 0;
-    }
-
     const AT_END_PAD = 2; // px tolerance so it feels responsive
 
     let wrappers = [];
@@ -40,16 +18,15 @@
     }
 
     function isAtPageEnd() {
-      const st = scrollTop();
-      const vh = viewportH();
-      const sh = docH();
-
-      const max = Math.max(1, sh - vh);
-      // Snap when within a few pixels to kill wobble from URL bar / rubber-band
-      const thresholdPx = 3; // tune if needed
-      if (max - st <= thresholdPx) return true;
-
-      return st >= max;
+      const scrollY = window.scrollY || window.pageYOffset;
+      const viewH = window.innerHeight || root.clientHeight;
+      const docH = Math.max(
+        root.scrollHeight,
+        root.offsetHeight,
+        root.clientHeight,
+        document.body ? Math.max(document.body.scrollHeight, document.body.offsetHeight) : 0
+      );
+      return scrollY + viewH >= docH - AT_END_PAD;
     }
 
     // Compute how far the rows must move to meet in a straight line
@@ -70,68 +47,29 @@
       // Read geometry without transforms applied
       const a = topWrap.getBoundingClientRect();
       const b = bottom.getBoundingClientRect();
+      const topMid = (a.top + a.bottom) / 2;
+      const botMid = (b.top + b.bottom) / 2;
 
-      // Helper: find edges using *thinnest* visible descendants (works with responsive sizes)
-      function thinEdges(root) {
-        const nodes = Array.from(root.querySelectorAll('*'));
-        if (!nodes.length) return null;
-        let minH = Infinity;
-        const rects = [];
-        for (const el of nodes) {
-          const r = el.getBoundingClientRect();
-          const h = r.height;
-          if (h > 0) {
-            rects.push(r);
-            if (h < minH) minH = h;
-          }
-        }
-        if (!rects.length || !Number.isFinite(minH)) return null;
-        // Keep elements within ~10% of the thinnest height (likely the bars)
-        const tol = minH * 1.1;
-        const thin = rects.filter(r => r.height <= tol);
-        return {
-          topMin: Math.min.apply(null, thin.map(r => r.top)),
-          bottomMax: Math.max.apply(null, thin.map(r => r.bottom))
-        };
-      }
+      // Half-pixel snap for crisp alignment on fractional device pixels
+      const hp = (n) => Math.round(n * 2) / 2;
+      const shift = Math.max(0, hp((botMid - topMid) / 2)); // symmetric meet
 
-      const topThin = thinEdges(topWrap);
-      const botThin = thinEdges(bottom);
-
-      // Prefer thin-descendant edges; fall back to container edges
-      const topBottom = topThin ? topThin.bottomMax : a.bottom;
-      let bottomTop = botThin ? botThin.topMin : b.top;
-
-      // Snap to the device-pixel grid to avoid fractional wobble on mobile
-      const dpr = Math.max(1, Math.round(window.devicePixelRatio || 1));
-      const snap = (n) => Math.round(n * dpr) / dpr;
-
-      const gap = bottomTop - topBottom; // positive gap between rows
-      const shiftTop = Math.max(0, snap(gap)); // move ONLY the top row by the full gap
-
-      // Restore state and write the CSS variables used by the CSS translation
+      // Restore state and write the CSS variable used by the CSS translation
       if (wasAtEnd) wrapper.classList.add("is-at-end");
-      // For compatibility, keep --ind-merge-shift equal to the top shift
-      wrapper.style.setProperty("--ind-merge-shift", `${shiftTop}px`);
-      wrapper.style.setProperty("--ind-merge-shift-top", `${shiftTop}px`);
-      wrapper.style.setProperty("--ind-merge-shift-bottom", `0px`);
+      wrapper.style.setProperty("--ind-merge-shift", `${shift}px`);
     }
 
     function calcAll() {
       wrappers.forEach(calcShift);
     }
 
-    // IntersectionObserver sentinel for rock-solid end detection
-    // (Removed per instructions)
-
     function updateEndClass() {
       const on = isAtPageEnd();
-      wrappers.forEach((w) => w.classList.toggle('is-at-end', on));
+      wrappers.forEach((w) => w.classList.toggle("is-at-end", on));
     }
 
     // Robust scheduling
     let queued = false;
-
     function scheduleAll() {
       if (queued) return;
       queued = true;
@@ -144,7 +82,6 @@
 
     function settleAll() {
       queryWrappers();
-      // ensureSentinel();  // Removed per instructions
       // run now and again after a couple of frames for safety
       scheduleAll();
       setTimeout(scheduleAll, 50);
@@ -179,12 +116,13 @@
     window.addEventListener(
       "scroll",
       () => {
-        updateEndClass();
+        const on = isAtPageEnd();
+        wrappers.forEach((w) => w.classList.toggle("is-at-end", on));
       },
       { passive: true }
     );
 
-    // Fonts loading can change metrics → recalc once ready
+    // Fonts loading can change metrics â†’ recalc once ready
     if (document.fonts && document.fonts.ready) {
       document.fonts.ready.then(settleAll).catch(() => {});
     }
