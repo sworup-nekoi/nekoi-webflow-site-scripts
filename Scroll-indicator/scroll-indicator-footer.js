@@ -73,9 +73,10 @@
       const topMid = (a.top + a.bottom) / 2;
       const botMid = (b.top + b.bottom) / 2;
 
-      // Half-pixel snap for crisp alignment on fractional device pixels
-      const hp = (n) => Math.round(n * 2) / 2;
-      const shift = Math.max(0, hp((botMid - topMid) / 2)); // symmetric meet
+      // Snap to the device-pixel grid to avoid fractional wobble on mobile
+      const dpr = Math.max(1, Math.round(window.devicePixelRatio || 1));
+      const snap = (n) => Math.round(n * dpr) / dpr;
+      const shift = Math.max(0, snap((botMid - topMid) / 2)); // symmetric meet
 
       // Restore state and write the CSS variable used by the CSS translation
       if (wasAtEnd) wrapper.classList.add("is-at-end");
@@ -87,6 +88,7 @@
     }
 
     // IntersectionObserver sentinel for rock-solid end detection
+    let endWasOn = false;
     let sentinelAtEnd = false;
     let io = null;
     function ensureSentinel() {
@@ -140,7 +142,14 @@
 
     function updateEndClass() {
       const on = sentinelAtEnd || isAtPageEnd();
+
+      // Recompute shifts the first time we enter the end state
+      if (on && !endWasOn) {
+        calcAll();
+      }
+
       wrappers.forEach((w) => w.classList.toggle('is-at-end', on));
+      endWasOn = on;
     }
 
     // Robust scheduling

@@ -10,6 +10,7 @@
   --safe-left: env(safe-area-inset-left, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --ind-bottom-gap: 12px; /* default dock gap; override per page if needed */
 }
 
 /* If you place the wrapper directly as a fixed footer indicator, add this class */
@@ -20,6 +21,8 @@
   bottom: calc(var(--safe-bottom) + var(--ind-bottom-gap, 12px));
   z-index: 9999;
   pointer-events: none; /* overlay only; remove if the element needs clicks */
+  transform: translateZ(0);
+  will-change: transform;
 }
 
 /* Wrapper-level knobs */
