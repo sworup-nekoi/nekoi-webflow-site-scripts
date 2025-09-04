@@ -6,7 +6,7 @@
 
 :root{
   /* Appearance */
-  --click-box-size: clamp(10px, 1.6vmin, 24px);
+  --click-box-size: clamp(10px, 1.2vmin, 24px);
   --click-box-border: 1px;
   --click-box-radius: 0px;                 /* 0 for sharp square */
   --click-box-duration: 400ms;
