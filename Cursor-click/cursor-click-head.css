@@ -34,7 +34,15 @@
   100% { transform: translate(-50%,-50%) scale(1.35); opacity: 0; }
 }
 
-/* Respect reduced motion */
+/* Respect reduced motion (no scale/translation, quick fade) */
 @media (prefers-reduced-motion: reduce){
-  .click-pulse { animation: none; opacity: 0; }
+  .click-pulse {
+    animation: clickPulseRM 200ms linear forwards;
+    transform: translate(-50%,-50%) scale(1); /* no motion */
+  }
+}
+
+@keyframes clickPulseRM{
+  from { opacity: 0.85; }
+  to   { opacity: 0; }
 }

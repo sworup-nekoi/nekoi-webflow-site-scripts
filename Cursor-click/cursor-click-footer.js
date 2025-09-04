@@ -13,7 +13,7 @@
   window.NekoiClickPulse = true;
 
   var MAX_PULSES = 8;          // maximum pulses kept in the layer
-  var Z_INDEX = 9999;       // overlay stacking (above custom cursor)
+  var Z_INDEX = 99999;       // overlay stacking (above custom cursor)
   var DURATION_MS = 420;       // keep in sync with --click-box-duration
 
   var layer = null;
