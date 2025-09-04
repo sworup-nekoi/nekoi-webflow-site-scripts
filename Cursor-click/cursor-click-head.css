@@ -6,10 +6,10 @@
 
 :root{
   /* Appearance */
-  --click-box-size: clamp(16px, 2.2vmin, 28px);
-  --click-box-border: 2px;
-  --click-box-radius: 4px;                 /* 0 for sharp square */
-  --click-box-duration: 420ms;
+  --click-box-size: clamp(10px, 1.6vmin, 24px);
+  --click-box-border: 1px;
+  --click-box-radius: 0px;                 /* 0 for sharp square */
+  --click-box-duration: 400ms;
   /* Integrates with your cursor/bracket color; override as needed */
   --click-box-color: var(--swatch--brand-secondary, #CCB368);
 }
