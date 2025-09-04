@@ -1,0 +1,40 @@
+
+
+/* NEKOI — Cursor Click Pulse (Head CSS)
+   Usage: pairs with Cursor-click/cursor-click-footer.js
+   Tweak via CSS vars below; no HTML changes required. */
+
+:root{
+  /* Appearance */
+  --click-box-size: clamp(16px, 2.2vmin, 28px);
+  --click-box-border: 2px;
+  --click-box-radius: 4px;                 /* 0 for sharp square */
+  --click-box-duration: 420ms;
+  /* Integrates with your cursor/bracket color; override as needed */
+  --click-box-color: var(--swatch--brand-secondary, #CCB368);
+}
+
+/* The ephemeral square spawned on click (mouse only; see footer JS) */
+.click-pulse {
+  position: fixed;
+  left: 0; top: 0;
+  width: var(--click-box-size);
+  height: var(--click-box-size);
+  border: var(--click-box-border) solid var(--click-box-color);
+  border-radius: var(--click-box-radius);
+  transform: translate(-50%, -50%) scale(0.6);
+  opacity: 0.85;
+  pointer-events: none;
+  will-change: transform, opacity;
+  animation: clickPulse var(--click-box-duration) cubic-bezier(.2,.7,.2,1) forwards;
+}
+
+@keyframes clickPulse{
+  60%  { transform: translate(-50%,-50%) scale(1.15); opacity: 1; }
+  100% { transform: translate(-50%,-50%) scale(1.35); opacity: 0; }
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce){
+  .click-pulse { animation: none; opacity: 0; }
+}
