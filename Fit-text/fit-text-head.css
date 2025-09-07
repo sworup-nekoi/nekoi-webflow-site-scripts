@@ -1,0 +1,19 @@
+/* NEKOI — Fit Text (Head CSS)
+   Pairs with: Fit-text/fit-text-footer.js (JS fitter)
+   Usage: add class `fit-text` to any text element; it will always fill its container's width.
+   Optional: add `cq-inline` to the container if you also use container queries elsewhere. */
+
+/* Enable inline-size container queries on a parent (optional helper) */
+.cq-inline { container-type: inline-size; }
+
+/* Target element to be fit to container width (single-line) */
+.fit-text {
+  display: block;
+  width: 100%;
+  white-space: nowrap; /* single line fit */
+  line-height: 1;      /* keeps measurement stable */
+
+  /* Tweaks via custom properties (set per element in Webflow) */
+  --fit-base: 100px;   /* temporary font-size used for measuring */
+  --fit-pad: 0px;      /* subtract from container width if you want inner padding/breathing room */
+}
