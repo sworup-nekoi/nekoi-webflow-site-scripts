@@ -1,30 +1,17 @@
-/* NEKOI — Fit Text (Head CSS)
-   Pairs with: Fit-text/fit-text-footer.js OR inline v3 spanify script in head.html
-   Purpose: Provide safe defaults and wrappers for per-letter span layout.
-   Notes:
-   - Do NOT set letter-spacing here; the JS reads it and emulates it via flex gap.
-   - Text is kept single-line; JS scales font-size to container width.
-*/
-
-/* Target text element */
-.studio-name {
-  /* Layout defaults; JS temporarily overrides display/width for measuring */
+/* NEKOI — Fit Text utility (CSS) */
+.fit-text {
   display: block;
   width: 100%;
-  white-space: nowrap;    /* single-line fit */
-  line-height: 1;         /* stable measurement */
-  /* letter-spacing intentionally not set here; JS will read current value */
+  white-space: nowrap;  /* single line */
+  line-height: 1;       /* stable measure */
+  /* Set your letter-spacing here; JS will emulate it with gap */
 }
 
-/* Wrapper injected by JS: spans one child per character, spacing via gap */
-.studio-name > .__fitLetters {
+/* Injected wrapper (no trailing gap) */
+.fit-text > .__fitLetters {
   display: inline-flex;
   white-space: nowrap;
   align-items: baseline;
-  gap: var(--fit-gap, 0em); /* JS sets this via inline style in em units */
+  gap: var(--fit-gap, 0em); /* set by JS in em */
 }
-
-/* Each per-letter span */
-.studio-name > .__fitLetters > span {
-  display: inline-block;
-}
+.fit-text > .__fitLetters > span { display: inline-block; }

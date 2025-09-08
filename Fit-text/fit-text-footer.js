@@ -1,54 +1,57 @@
 /**
- * NEKOI — Fit Text v3 (Footer JS)
- * Pixel-perfect, content-aware fit-to-container for titles.
- * - Targets: text `.studio-name` inside container `.hero-title`
- * - Removes trailing spacing by replacing letter-spacing with per-letter spans + flex gap
- * - Measures intrinsically at a base size and scales to container inner width
- * - Auto-refits on resize, text/style changes, and after webfonts load
- * - ES5/minifier-friendly
+ * NEKOI — Fit Text V4 (Footer JS)
+ * Reusable, class-based, content-aware fit-to-container with no trailing gap.
+ *
+ * Usage in Webflow/HTML:
+ *   <div class="fit-text-container">  <!-- the container whose inner width we fill -->
+ *     <h1 class="fit-text">NEKOI</h1>  <!-- the text that should fill -->
+ *   </div>
+ *   // Optional: set letter-spacing on .fit-text; this script converts it to flex gap
+ *
+ * Classes:
+ *   - .fit-text-container  → container to fit into (padding is respected)
+ *   - .fit-text            → text to scale; kept single-line; trailing gap removed
+ *
+ * Notes:
+ *   - ES5 compatible; safe observers; rAF-batched; avoids attribute/style loops
+ *   - Exposes window.NekoiFitTextV4.{refresh(), destroy()}
  */
 (function(){
-  // Prevent double init (e.g., multiple script tags / SPA swaps)
-  if (window.NekoiFitTextV3) return;
+  if (window.NekoiFitTextV4){ try{ window.NekoiFitTextV4.refresh(); }catch(e){} return; }
 
-  var TEXT_SEL = '.studio-name';
-  var CONT_SEL = '.hero-title';
+  var TEXT_SEL = '.fit-text';
+  var CONT_SEL = '.fit-text-container';
 
   var els = [];
-  var ros = []; // ResizeObservers
-  var mos = []; // MutationObservers
+  var ros = [];                 // ResizeObservers
+  var mos = [];                 // MutationObservers
+  var spanifying = new WeakSet();
+  var queue = [];
+  var rafId = null;
+  var lastSig = new WeakMap();  // cache last measurement signature per element
 
-  function toPx(val){
-    var n = parseFloat(val); return isFinite(n) ? n : 0;
-  }
+  function toPx(v){ var n = parseFloat(v); return isFinite(n) ? n : 0; }
+  function closestEl(el, sel){ while (el && el.nodeType === 1){ if (el.matches && el.matches(sel)) return el; el = el.parentElement; } return null; }
+  function getContent(el){ var a = el.getAttribute('data-fit-text'); if (a) return a; return (el.textContent || '').replace(/\s+/g,' ').trim(); }
 
-  function closestEl(el, sel){
-    while (el && el.nodeType === 1){
-      if (el.matches && el.matches(sel)) return el;
-      el = el.parentElement;
-    }
-    return null;
-  }
-
-  // Create/refresh the per-letter span wrapper and convert tracking into gap (no trailing gap)
-  function spanify(el){
-    // If already spanified, refresh gap from current letter-spacing and return
-    var wrap = el.querySelector('.__fitLetters');
+  // Create or refresh the per-letter wrapper and use flex gap for spacing (no trailing gap)
+  function ensureWrap(el){
+    var wrap = el.querySelector(':scope > .__fitLetters');
     var cs = getComputedStyle(el);
-    var fsPx = toPx(cs.fontSize) || 16;
-    var lsRaw = cs.letterSpacing;
-    var lsPx = (lsRaw && lsRaw !== 'normal') ? toPx(lsRaw) : 0;
-    var lsEm = fsPx ? (lsPx / fsPx) : 0;
+    var fs = toPx(cs.fontSize) || 16;
+    var lsPx = (cs.letterSpacing && cs.letterSpacing !== 'normal') ? toPx(cs.letterSpacing) : 0;
+    var lsEm = fs ? (lsPx / fs) : 0;
 
     if (wrap){
       wrap.style.gap = (lsEm ? lsEm : 0) + 'em';
-      // Ensure parent letter-spacing is neutralized
       el.style.letterSpacing = '0';
       return wrap;
     }
 
-    var text = (el.textContent || '').replace(/\s+/g,' ').trim();
+    var text = getContent(el);
     if (!text) return null;
+
+    spanifying.add(el);
 
     wrap = document.createElement('span');
     wrap.className = '__fitLetters';
@@ -58,11 +61,10 @@
     ws.alignItems = 'baseline';
     ws.gap = (lsEm ? lsEm : 0) + 'em';
 
-    // Clear letter-spacing on the element itself; we emulate via gap
+    // neutralize letter-spacing on the host element; we emulate via gap
     el.style.letterSpacing = '0';
 
-    // Create spans per character (NBSP for spaces)
-    for (var i=0; i<text.length; i++){
+    for (var i = 0; i < text.length; i++){
       var ch = text.charAt(i);
       var s = document.createElement('span');
       s.textContent = (ch === ' ') ? '\u00A0' : ch;
@@ -70,9 +72,9 @@
       wrap.appendChild(s);
     }
 
-    // Replace raw text with wrapper
     el.textContent = '';
     el.appendChild(wrap);
+    spanifying.delete(el);
     return wrap;
   }
 
@@ -80,95 +82,112 @@
     var container = closestEl(el, CONT_SEL) || el.parentElement;
     if (!container) return;
 
-    var wrap = spanify(el);
+    var wrap = ensureWrap(el);
     if (!wrap) return;
 
-    // Container inner width (minus padding)
+    // container inner width (minus padding)
     var csC = getComputedStyle(container);
     var padL = toPx(csC.paddingLeft), padR = toPx(csC.paddingRight);
     var cw = (container.clientWidth || container.getBoundingClientRect().width) - padL - padR;
-    if (!isFinite(cw) || cw <= 0) return;
+    if (!(cw > 0)) return;
 
-    // Save styles we touch
+    // Skip work if nothing meaningful changed
+    var sig = getContent(el) + '|' + getComputedStyle(el).letterSpacing + '|' + cw.toFixed(2);
+    if (lastSig.get(el) === sig) return;
+
+    // measure intrinsically at base
+    var BASE = 100; // px
     var prevFS = el.style.fontSize;
     var prevWS = el.style.whiteSpace;
     var prevDisp = el.style.display;
     var prevW = el.style.width;
 
-    // Intrinsic measurement at base size
-    var BASE = 100; // px
     el.style.whiteSpace = 'nowrap';
     el.style.display = 'inline-block';
     el.style.width = 'auto';
     el.style.fontSize = BASE + 'px';
 
     var tw = wrap.scrollWidth || wrap.getBoundingClientRect().width || 0;
-    if (!isFinite(tw) || tw <= 0){
+    if (!(tw > 0)){
       el.style.fontSize = prevFS; el.style.whiteSpace = prevWS; el.style.display = prevDisp; el.style.width = prevW; return;
     }
 
-    // Exact scale and snap to device pixel for crispness
+    // exact scale and snap to device pixel for crisp text
     var scale = cw / tw;
     var size  = Math.max(0.0001, BASE * scale);
     var dpr   = Math.max(1, Math.round(window.devicePixelRatio || 1));
     var final = Math.round(size * dpr) / dpr;
 
-    // Apply and restore layout props
+    // apply and restore layout props
     el.style.fontSize = final + 'px';
     el.style.whiteSpace = prevWS || '';
     el.style.display    = prevDisp || '';
     el.style.width      = prevW || '';
+
+    lastSig.set(el, sig);
   }
 
-  function fitAll(){
-    for (var i=0; i<els.length; i++) fitOne(els[i]);
+  function enqueue(el){
+    if (queue.indexOf(el) === -1) queue.push(el);
+    if (rafId) return;
+    rafId = requestAnimationFrame(function(){
+      rafId = null;
+      var list = queue.slice(); queue.length = 0;
+      for (var i = 0; i < list.length; i++) fitOne(list[i]);
+    });
   }
+
+  function refresh(){ for (var i = 0; i < els.length; i++) enqueue(els[i]); }
 
   function observe(el){
     var container = closestEl(el, CONT_SEL) || el.parentElement;
 
-    // Refit on container or element resize
-    if (window.ResizeObserver){
-      var ro = new ResizeObserver(function(){ fitOne(el); });
-      ro.observe(container); ro.observe(el);
+    // Refit on container resize only (avoid element resize feedback)
+    if ('ResizeObserver' in window){
+      var ro = new ResizeObserver(function(){ enqueue(el); });
+      ro.observe(container);
       ros.push(ro);
     } else {
-      window.addEventListener('resize', function(){ fitOne(el); }, { passive: true });
+      window.addEventListener('resize', function(){ enqueue(el); }, { passive: true });
     }
 
-    // Re-spanify & refit on content/style changes (text, tracking changes, etc.)
-    var mo = new MutationObserver(function(){ spanify(el); fitOne(el); });
-    mo.observe(el, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
+    // Watch text content changes only (avoid attribute/style loops)
+    var mo = new MutationObserver(function(muts){
+      if (spanifying.has(el)) return; // ignore our own span rebuilds
+      for (var i = 0; i < muts.length; i++){
+        var m = muts[i];
+        if (m.type === 'characterData' || m.type === 'childList'){
+          ensureWrap(el);
+          enqueue(el);
+          break;
+        }
+      }
+    });
+    mo.observe(el, { childList: true, subtree: true, characterData: true });
     mos.push(mo);
   }
 
   function init(){
     els = Array.prototype.slice.call(document.querySelectorAll(TEXT_SEL));
-    for (var i=0; i<els.length; i++){
-      spanify(els[i]);
-      fitOne(els[i]);
+    for (var i = 0; i < els.length; i++){
+      ensureWrap(els[i]);
       observe(els[i]);
     }
-
-    // Refit after webfonts load
-    try {
-      if (document.fonts && document.fonts.ready && typeof document.fonts.ready.then === 'function') {
-        document.fonts.ready.then(function(){ fitAll(); });
-      }
-    } catch (_) {}
+    refresh();
+    try { if (document.fonts && document.fonts.ready && typeof document.fonts.ready.then === 'function') { document.fonts.ready.then(refresh); } } catch(_){}
   }
 
   if (document.readyState !== 'loading') init();
   else document.addEventListener('DOMContentLoaded', init);
 
-  // Public API for debugging
-  window.NekoiFitTextV3 = {
-    refresh: fitAll,
-    teardown: function(){
-      for (var i=0; i<ros.length; i++) try { ros[i].disconnect(); } catch(e){}
-      for (var j=0; j<mos.length; j++) try { mos[j].disconnect(); } catch(e){}
-      ros = []; mos = []; els = [];
-      delete window.NekoiFitTextV3;
+  window.NekoiFitTextV4 = {
+    refresh: refresh,
+    destroy: function(){
+      for (var i = 0; i < ros.length; i++) try { ros[i].disconnect(); } catch(e){}
+      for (var j = 0; j < mos.length; j++) try { mos[j].disconnect(); } catch(e){}
+      ros = []; mos = []; els = []; queue = [];
+      if (rafId){ cancelAnimationFrame(rafId); rafId = null; }
+      delete window.NekoiFitTextV4;
     }
   };
 })();

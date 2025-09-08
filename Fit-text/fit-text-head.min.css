@@ -1,1 +1,1 @@
-.studio-name{display:block;width:100%;white-space:nowrap;line-height:1}.studio-name>.__fitLetters{display:inline-flex;white-space:nowrap;align-items:baseline;gap:var(--fit-gap,0)}.studio-name>.__fitLetters>span{display:inline-block}
+.fit-text{display:block;width:100%;white-space:nowrap;line-height:1}.fit-text>.__fitLetters{display:inline-flex;white-space:nowrap;align-items:baseline;gap:var(--fit-gap,0)}.fit-text>.__fitLetters>span{display:inline-block}
