@@ -1,143 +1,174 @@
 /**
- * NEKOI — Fit Text (Footer JS)
- * Always fits single-line text to its container width by measuring at a base size
- * and scaling to match the available width exactly (no min/max clamps).
- *
- * Usage: add class `fit-text` to any text element.
- * Optional per-element custom properties (set in Webflow):
- *   --fit-base: 100px;  // measurement baseline (does not change final size)
- *   --fit-pad:  0px;    // subtract from container width (e.g., inner padding)
+ * NEKOI — Fit Text v3 (Footer JS)
+ * Pixel-perfect, content-aware fit-to-container for titles.
+ * - Targets: text `.studio-name` inside container `.hero-title`
+ * - Removes trailing spacing by replacing letter-spacing with per-letter spans + flex gap
+ * - Measures intrinsically at a base size and scales to container inner width
+ * - Auto-refits on resize, text/style changes, and after webfonts load
+ * - ES5/minifier-friendly
  */
 (function(){
-  // Guard double init (e.g., SPA swaps)
-  if (window.NekoiFitText) return;
+  // Prevent double init (e.g., multiple script tags / SPA swaps)
+  if (window.NekoiFitTextV3) return;
 
-  var SEL = '.fit-text';
-  var pending = [];          // queued elements to fit
-  var rafId = null;          // RAF id for batching
-  var RO = null;             // ResizeObserver
-  var MO = null;             // MutationObserver
+  var TEXT_SEL = '.studio-name';
+  var CONT_SEL = '.hero-title';
 
-  function has(arr, el){ for (var i=0;i<arr.length;i++){ if (arr[i]===el) return true; } return false; }
-  function empty(arr){ arr.length = 0; }
+  var els = [];
+  var ros = []; // ResizeObservers
+  var mos = []; // MutationObservers
 
-  function pxVar(el, name, fallback){
-    var v = '' + (getComputedStyle(el).getPropertyValue(name) || '').trim();
-    if (!v) return fallback;
-    if (v.slice(-3) === 'rem') return parseFloat(v) * parseFloat(getComputedStyle(document.documentElement).fontSize);
-    if (v.slice(-2) === 'em')  return parseFloat(v) * parseFloat(getComputedStyle(el).fontSize);
-    return parseFloat(v);
+  function toPx(val){
+    var n = parseFloat(val); return isFinite(n) ? n : 0;
   }
 
-  function fit(el){
-    if (!el || !el.parentElement) return;
-    var base = pxVar(el, '--fit-base', 100) || 100;
-    var pad  = pxVar(el, '--fit-pad', 0) || 0;
+  function closestEl(el, sel){
+    while (el && el.nodeType === 1){
+      if (el.matches && el.matches(sel)) return el;
+      el = el.parentElement;
+    }
+    return null;
+  }
 
-    var parent = el.parentElement;
+  // Create/refresh the per-letter span wrapper and convert tracking into gap (no trailing gap)
+  function spanify(el){
+    // If already spanified, refresh gap from current letter-spacing and return
+    var wrap = el.querySelector('.__fitLetters');
+    var cs = getComputedStyle(el);
+    var fsPx = toPx(cs.fontSize) || 16;
+    var lsRaw = cs.letterSpacing;
+    var lsPx = (lsRaw && lsRaw !== 'normal') ? toPx(lsRaw) : 0;
+    var lsEm = fsPx ? (lsPx / fsPx) : 0;
+
+    if (wrap){
+      wrap.style.gap = (lsEm ? lsEm : 0) + 'em';
+      // Ensure parent letter-spacing is neutralized
+      el.style.letterSpacing = '0';
+      return wrap;
+    }
+
+    var text = (el.textContent || '').replace(/\s+/g,' ').trim();
+    if (!text) return null;
+
+    wrap = document.createElement('span');
+    wrap.className = '__fitLetters';
+    var ws = wrap.style;
+    ws.display = 'inline-flex';
+    ws.whiteSpace = 'nowrap';
+    ws.alignItems = 'baseline';
+    ws.gap = (lsEm ? lsEm : 0) + 'em';
+
+    // Clear letter-spacing on the element itself; we emulate via gap
+    el.style.letterSpacing = '0';
+
+    // Create spans per character (NBSP for spaces)
+    for (var i=0; i<text.length; i++){
+      var ch = text.charAt(i);
+      var s = document.createElement('span');
+      s.textContent = (ch === ' ') ? '\u00A0' : ch;
+      s.style.display = 'inline-block';
+      wrap.appendChild(s);
+    }
+
+    // Replace raw text with wrapper
+    el.textContent = '';
+    el.appendChild(wrap);
+    return wrap;
+  }
+
+  function fitOne(el){
+    var container = closestEl(el, CONT_SEL) || el.parentElement;
+    if (!container) return;
+
+    var wrap = spanify(el);
+    if (!wrap) return;
+
+    // Container inner width (minus padding)
+    var csC = getComputedStyle(container);
+    var padL = toPx(csC.paddingLeft), padR = toPx(csC.paddingRight);
+    var cw = (container.clientWidth || container.getBoundingClientRect().width) - padL - padR;
+    if (!isFinite(cw) || cw <= 0) return;
 
     // Save styles we touch
     var prevFS = el.style.fontSize;
     var prevWS = el.style.whiteSpace;
+    var prevDisp = el.style.display;
+    var prevW = el.style.width;
 
-    // Measure at base size, single line
-    el.style.fontSize = base + 'px';
+    // Intrinsic measurement at base size
+    var BASE = 100; // px
     el.style.whiteSpace = 'nowrap';
+    el.style.display = 'inline-block';
+    el.style.width = 'auto';
+    el.style.fontSize = BASE + 'px';
 
-    // Width of the text at base size
-    var textW = el.scrollWidth || el.getBoundingClientRect().width || 0;
+    var tw = wrap.scrollWidth || wrap.getBoundingClientRect().width || 0;
+    if (!isFinite(tw) || tw <= 0){
+      el.style.fontSize = prevFS; el.style.whiteSpace = prevWS; el.style.display = prevDisp; el.style.width = prevW; return;
+    }
 
-    // Available width inside the container
-    var cw = parent.clientWidth || parent.getBoundingClientRect().width || 0;
-    var avail = Math.max(0, cw - pad);
+    // Exact scale and snap to device pixel for crispness
+    var scale = cw / tw;
+    var size  = Math.max(0.0001, BASE * scale);
+    var dpr   = Math.max(1, Math.round(window.devicePixelRatio || 1));
+    var final = Math.round(size * dpr) / dpr;
 
-    // Compute exact scale (no clamps)
-    var scale = textW > 0 ? (avail / textW) : 1;
-    var size = base * scale;
-
-    // Snap to device pixel to avoid blur
-    var dpr = Math.max(1, Math.round(window.devicePixelRatio || 1));
-    size = Math.round(size * dpr) / dpr;
-
-    el.style.fontSize = size + 'px';
+    // Apply and restore layout props
+    el.style.fontSize = final + 'px';
     el.style.whiteSpace = prevWS || '';
-
-    // If webfonts are still loading, refit after they finish
-    try {
-      if (document.fonts && document.fonts.ready && typeof document.fonts.ready.then === 'function') {
-        document.fonts.ready.then(function(){ queue(el); });
-      }
-    } catch(_){}
-  }
-
-  function queue(el){
-    if (!el) return;
-    if (!has(pending, el)) pending.push(el);
-    if (rafId) return;
-    rafId = requestAnimationFrame(function(){
-      rafId = null;
-      var list = pending.slice();
-      empty(pending);
-      for (var i=0;i<list.length;i++) fit(list[i]);
-    });
+    el.style.display    = prevDisp || '';
+    el.style.width      = prevW || '';
   }
 
   function fitAll(){
-    var nodes = document.querySelectorAll(SEL);
-    for (var i=0;i<nodes.length;i++) queue(nodes[i]);
+    for (var i=0; i<els.length; i++) fitOne(els[i]);
   }
 
   function observe(el){
-    if (!el) return;
-    if (!RO && 'ResizeObserver' in window){
-      RO = new ResizeObserver(function(entries){
-        for (var i=0;i<entries.length;i++){
-          var t = entries[i].target;
-          if (t.matches && t.matches(SEL)) queue(t);
-          if (t.querySelectorAll){
-            var kids = t.querySelectorAll(SEL);
-            for (var j=0;j<kids.length;j++) queue(kids[j]);
-          }
-        }
-      });
-    }
-    if (!MO && 'MutationObserver' in window){
-      MO = new MutationObserver(function(muts){
-        var seen = [];
-        for (var i=0;i<muts.length;i++){
-          var n = muts[i].target;
-          if (n && n.nodeType === 1){
-            if (n.matches && n.matches(SEL) && !has(seen,n)) { seen.push(n); queue(n); }
-            if (n.querySelectorAll){
-              var all = n.querySelectorAll(SEL);
-              for (var k=0;k<all.length;k++){ var el2 = all[k]; if (!has(seen,el2)) { seen.push(el2); queue(el2); } }
-            }
-          }
-        }
-      });
-      MO.observe(document.documentElement, { subtree:true, childList:true, characterData:true, attributes:true });
-    }
-    if (RO){
-      RO.observe(el);
-      if (el.parentElement) RO.observe(el.parentElement);
+    var container = closestEl(el, CONT_SEL) || el.parentElement;
+
+    // Refit on container or element resize
+    if (window.ResizeObserver){
+      var ro = new ResizeObserver(function(){ fitOne(el); });
+      ro.observe(container); ro.observe(el);
+      ros.push(ro);
     } else {
-      // Fallback: window resize
-      window.addEventListener('resize', function(){ queue(el); }, { passive:true });
+      window.addEventListener('resize', function(){ fitOne(el); }, { passive: true });
     }
+
+    // Re-spanify & refit on content/style changes (text, tracking changes, etc.)
+    var mo = new MutationObserver(function(){ spanify(el); fitOne(el); });
+    mo.observe(el, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ['style', 'class'] });
+    mos.push(mo);
   }
 
   function init(){
-    var list = document.querySelectorAll(SEL);
-    for (var i=0;i<list.length;i++) observe(list[i]);
-    fitAll();
+    els = Array.prototype.slice.call(document.querySelectorAll(TEXT_SEL));
+    for (var i=0; i<els.length; i++){
+      spanify(els[i]);
+      fitOne(els[i]);
+      observe(els[i]);
+    }
+
+    // Refit after webfonts load
+    try {
+      if (document.fonts && document.fonts.ready && typeof document.fonts.ready.then === 'function') {
+        document.fonts.ready.then(function(){ fitAll(); });
+      }
+    } catch (_) {}
   }
 
   if (document.readyState !== 'loading') init();
   else document.addEventListener('DOMContentLoaded', init);
 
-  // Public API
-  window.NekoiFitText = { refresh: fitAll };
-
-  // Refit on SPA/Swup custom event if used
-  document.addEventListener('spa:ready', fitAll);
+  // Public API for debugging
+  window.NekoiFitTextV3 = {
+    refresh: fitAll,
+    teardown: function(){
+      for (var i=0; i<ros.length; i++) try { ros[i].disconnect(); } catch(e){}
+      for (var j=0; j<mos.length; j++) try { mos[j].disconnect(); } catch(e){}
+      ros = []; mos = []; els = [];
+      delete window.NekoiFitTextV3;
+    }
+  };
 })();

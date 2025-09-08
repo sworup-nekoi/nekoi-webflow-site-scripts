@@ -1,19 +1,33 @@
 /* NEKOI — Fit Text (Head CSS)
-   Pairs with: Fit-text/fit-text-footer.js (JS fitter)
-   Usage: add class `fit-text` to any text element; it will always fill its container's width.
-   Optional: add `cq-inline` to the container if you also use container queries elsewhere. */
+   Pairs with: Fit-text/fit-text-footer.js OR inline v3 spanify script in head.html
+   Purpose: Provide safe defaults and wrappers for per-letter span layout.
+   Notes:
+   - Do NOT set letter-spacing here; the JS reads it and emulates it via flex gap.
+   - Text is kept single-line; JS scales font-size to container width.
+*/
 
-/* Enable inline-size container queries on a parent (optional helper) */
-.cq-inline { container-type: inline-size; }
+/* Container (optional): this utility is safe and has no layout side effects */
+.hero-title { /* you can add container-related styles if needed */ }
 
-/* Target element to be fit to container width (single-line) */
-.fit-text {
+/* Target text element */
+.studio-name {
+  /* Layout defaults; JS temporarily overrides display/width for measuring */
   display: block;
   width: 100%;
-  white-space: nowrap; /* single line fit */
-  line-height: 1;      /* keeps measurement stable */
+  white-space: nowrap;    /* single-line fit */
+  line-height: 1;         /* stable measurement */
+  /* letter-spacing intentionally not set here; JS will read current value */
+}
 
-  /* Tweaks via custom properties (set per element in Webflow) */
-  --fit-base: 100px;   /* temporary font-size used for measuring */
-  --fit-pad: 0px;      /* subtract from container width if you want inner padding/breathing room */
+/* Wrapper injected by JS: spans one child per character, spacing via gap */
+.studio-name > .__fitLetters {
+  display: inline-flex;
+  white-space: nowrap;
+  align-items: baseline;
+  gap: var(--fit-gap, 0em); /* JS sets this via inline style in em units */
+}
+
+/* Each per-letter span */
+.studio-name > .__fitLetters > span {
+  display: inline-block;
 }
