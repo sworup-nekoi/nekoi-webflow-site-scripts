@@ -6,9 +6,6 @@
    - Text is kept single-line; JS scales font-size to container width.
 */
 
-/* Container (optional): this utility is safe and has no layout side effects */
-.hero-title { /* you can add container-related styles if needed */ }
-
 /* Target text element */
 .studio-name {
   /* Layout defaults; JS temporarily overrides display/width for measuring */
